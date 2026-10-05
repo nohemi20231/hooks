@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/agent-complete-sound.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
