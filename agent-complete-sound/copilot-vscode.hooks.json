@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "/bin/bash ~/.copilot/hooks/agent-complete-sound.sh",
+        "timeout": 30
+      }
+    ]
+  }
+}
