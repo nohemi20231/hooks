@@ -1,8 +1,9 @@
 #!/bin/bash
 # Agent-complete sound hook for Claude Code, GitHub Copilot in VS Code, and Copilot CLI.
 #
-# Chimes when the agent finishes. If you've been away from the keyboard for
-# IDLE_SECONDS or more, it also speaks which agent finished and on what.
+# Chimes when the agent finishes, or (Claude Code Notification event) when it is
+# waiting on you mid-task, e.g. a permission prompt. If you've been away from the
+# keyboard for IDLE_SECONDS or more, it also speaks which agent and on what.
 # The script detects which tool called it from the JSON it receives on stdin.
 #
 # macOS only (afplay, ioreg, say). Always exits 0 so it never blocks the agent.
@@ -76,10 +77,11 @@ fi
 
 title=$(printf '%s' "$title" | tr '\n\t' '  ' | cut -c1-80)
 
-case "$reason" in
-  error)   verb="hit an error" ;;
-  timeout) verb="timed out" ;;
-  abort)   verb="was stopped" ;;
+case "$event:$reason" in
+  Notification:*) verb="needs you" ;;
+  *:error)   verb="hit an error" ;;
+  *:timeout) verb="timed out" ;;
+  *:abort)   verb="was stopped" ;;
   *)       verb="finished" ;;
 esac
 

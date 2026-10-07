@@ -5,7 +5,7 @@ One folder per hook. Each hook works with Claude Code and GitHub Copilot where p
 
 | Hook | Event | What it does |
 |---|---|---|
-| `agent-complete-sound/` | Stop / agentStop | Chimes when the agent finishes. If you've been idle 60s+, speaks which agent finished and on what. macOS only. |
+| `agent-complete-sound/` | Stop / agentStop, Notification | Chimes when the agent finishes or is waiting on you (Claude Code). If you've been idle 60s+, speaks which agent and on what. macOS only. |
 
 ## `agent-complete-sound`
 
@@ -15,6 +15,8 @@ who called it, then says, for example:
 - "Claude finished: Add rate limiting to the orders service"
 - "Copilot finished: therapy" (Copilot CLI sends no transcript, so it uses the project folder)
 - "Copilot hit an error: orders-api"
+- "Claude needs you: Add rate limiting to the orders service" (Claude Code is waiting on a
+  permission prompt or your input, mid-task)
 
 ### Install the script (once)
 
@@ -33,7 +35,8 @@ chmod +x ~/.claude/hooks/agent-complete-sound.sh ~/.copilot/hooks/agent-complete
 | Copilot in VS Code | `~/.copilot/hooks/agent-complete-sound.json` | `copilot-vscode.hooks.json` |
 | Copilot CLI | `~/.copilot/hooks/agent-complete-sound-cli.json` | `copilot-cli.hooks.json` |
 
-If a settings file already has a `hooks` key, add the entry to it rather than replacing it.
+If a settings file already has a `hooks` key, add the entries to it rather than replacing it.
+For Claude Code, register both `Stop` (finished) and `Notification` (waiting on you).
 Restart the agent afterwards (`/hooks` in Claude Code lists what's loaded).
 
 **Heads-up:** VS Code Copilot also reads Claude Code's `~/.claude/settings.json`.
