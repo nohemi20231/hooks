@@ -9,7 +9,7 @@
 # macOS only (afplay, ioreg, say). Always exits 0 so it never blocks the agent.
 # Works with macOS's built-in bash 3.2.
 
-SOUND="${AGENT_SOUND:-/System/Library/Sounds/Glass.aiff}"
+SOUND="${AGENT_SOUND:-/System/Library/Sounds/Submarine.aiff}"
 IDLE_SECONDS="${AGENT_IDLE_SECONDS:-60}"
 DRY_RUN="${AGENT_SOUND_DRY_RUN:-0}"   # 1 = print instead of playing/speaking (for testing)
 

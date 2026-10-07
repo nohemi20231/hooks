@@ -48,7 +48,7 @@ Set these in your shell profile to override the defaults:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AGENT_SOUND` | `/System/Library/Sounds/Glass.aiff` | Sound to play |
+| `AGENT_SOUND` | `/System/Library/Sounds/Submarine.aiff` | Sound to play (shown as "Submerge" in System Settings) |
 | `AGENT_IDLE_SECONDS` | `60` | Idle time before it speaks |
 | `AGENT_NAME` | auto-detected | Force the spoken agent name |
 | `AGENT_SOUND_DRY_RUN` | `0` | `1` prints instead of playing/speaking |
