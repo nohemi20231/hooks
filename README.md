@@ -63,7 +63,7 @@ echo '{"sessionId":"x","cwd":"'"$PWD"'","reason":"complete"}' \
   | AGENT_SOUND_DRY_RUN=1 ./agent-complete-sound/agent-complete-sound.sh
 ```
 
-Credit: adapted from Pamela Fox's Copilot hook in
+Credit: adapted from Pamela Fox's [agent completion hook](https://gist.github.com/pamelafox/c9cb3e000fdf127741b121d7c5abbf02), shown in
 [Parallelize development with GitHub Copilot](https://pamelafox.github.io/parallelize-development-github-copilot/#/24).
 
 ## License
