@@ -65,3 +65,7 @@ echo '{"sessionId":"x","cwd":"'"$PWD"'","reason":"complete"}' \
 
 Credit: adapted from Pamela Fox's Copilot hook in
 [Parallelize development with GitHub Copilot](https://pamelafox.github.io/parallelize-development-github-copilot/#/24).
+
+## License
+
+Copyright 2026 Nohemi Gonzalez Lopez. Licensed under the [Apache License, Version 2.0](LICENSE). Keep the [`NOTICE`](NOTICE) file when redistributing.
