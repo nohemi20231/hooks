@@ -166,3 +166,15 @@ class Aliases(unittest.TestCase):
 
     def test_known_non_push_is_not_a_candidate(self):
         self.assertEqual(find_pushes("git status", CWD), [])
+
+
+class MultiLineAndKeywords(unittest.TestCase):
+    """Reviewer items 1, 2 and 4: everyday shapes Claude writes."""
+    def test_push_on_the_second_line(self):
+        self.assertEqual(one("echo start\ngit push").args, [])
+
+    def test_cd_then_push_on_the_next_line(self):
+        self.assertEqual(one("cd sub\ngit push").cwd, "/repo/sub")
+
+    def test_heredoc_body_line(self):
+        self.assertEqual(len(find_pushes("bash <<EOF\ngit push\nEOF", CWD)), 1)
