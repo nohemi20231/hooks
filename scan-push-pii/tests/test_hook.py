@@ -122,6 +122,18 @@ class SecretsInTheTree(HookCase):
         self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout + run.stderr)
         self.assertNotIn(FAKE_ANTHROPIC_KEY[5:25], run.stdout + run.stderr)
 
+    def test_secret_found_when_cwd_is_a_subdirectory(self):
+        repo = make_repo(self.root)
+        commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
+        run = self.run_hook("git push", os.path.join(repo, "sub"))
+        self.assertTrue(run.denied)
+        self.assertIn("sub/.env", run.reason)
+
+    def test_secret_found_after_cd_into_subdirectory(self):
+        repo = make_repo(self.root)
+        commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
+        self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
+
 
 class PersonalData(HookCase):
     def test_allowlist_hides_an_ask_tier_item(self):
