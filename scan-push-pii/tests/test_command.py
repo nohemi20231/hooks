@@ -179,6 +179,15 @@ class MultiLineAndKeywords(unittest.TestCase):
     def test_heredoc_body_line(self):
         self.assertEqual(len(find_pushes("bash <<EOF\ngit push\nEOF", CWD)), 1)
 
+    def test_heredoc_fed_to_a_remote_shell_is_commands(self):
+        self.assertEqual(len(find_pushes("ssh host bash <<EOF\ngit push\nEOF", CWD)), 1)
+
+    def test_heredoc_written_to_a_file_is_data(self):
+        self.assertEqual(find_pushes("cat > notes.md <<'EOF'\nrun `git push` later\nEOF", CWD), [])
+
+    def test_command_after_a_data_heredoc_is_seen(self):
+        self.assertEqual(len(find_pushes("cat > f <<EOF\ndata\nEOF\ngit push", CWD)), 1)
+
     def test_brace_group(self):
         self.assertEqual(len(find_pushes("true && { git push; }", CWD)), 1)
 
