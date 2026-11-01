@@ -146,6 +146,22 @@ class WhichRefsArePushed(HookCase):
         self.assertTrue(self.run_hook("git push origin leak:refs/heads/x", repo).denied)
         self.assertTrue(self.run_hook("git push", repo).allowed)
 
+    def test_dash_C_absolute_path_is_scanned(self):
+        repo = make_repo(self.root)
+        commit(repo, {"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
+        self.assertTrue(self.run_hook(f"git -C {repo} push", self.root).denied)
+
+    def test_push_alias_is_resolved_from_git_config(self):
+        repo = make_repo(self.root)
+        git(repo, "config", "alias.p", "push")
+        commit(repo, {"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
+        self.assertTrue(self.run_hook("git p origin main", repo).denied)
+
+    def test_non_push_alias_is_allowed(self):
+        repo = make_repo(self.root, files={"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
+        git(repo, "config", "alias.st", "status")
+        self.assertTrue(self.run_hook("git st", repo).allowed)
+
 
 class PersonalData(HookCase):
     def test_allowlist_hides_an_ask_tier_item(self):
