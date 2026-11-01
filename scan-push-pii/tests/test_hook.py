@@ -179,6 +179,20 @@ class WhichRefsArePushed(HookCase):
         self.assertTrue(self.run_hook("git st", repo).allowed)
 
 
+class FailClosedWithAReadableReason(HookCase):
+    def test_cd_to_missing_directory_denies_without_traceback(self):
+        run = self.run_hook('cd "$HOME/does-not-exist-pushscan" && git push', self.root)
+        self.assertTrue(run.denied)
+        self.assertNotIn("Traceback", run.stdout + run.stderr)
+        self.assertIn("does-not-exist-pushscan", run.reason)
+
+    def test_cd_to_a_file_denies_readably(self):
+        repo = make_repo(self.root)
+        run = self.run_hook("cd README.md && git push", repo)
+        self.assertTrue(run.denied)
+        self.assertNotIn("Traceback", run.stdout + run.stderr)
+
+
 class PersonalData(HookCase):
     def test_allowlist_hides_an_ask_tier_item(self):
         repo = make_repo(self.root)
