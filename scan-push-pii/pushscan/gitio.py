@@ -126,7 +126,7 @@ class Repo:
         if remote is None:
             first = refs[0].replace("refs/heads/", "", 1) if refs else "HEAD"
             remote = self.push_remote_for(first)
-        return [PushRange(ref, self._base_for(ref, remote)) for ref in refs]
+        return [PushRange(ref, self.base_for(ref, remote)) for ref in refs]
 
     @staticmethod
     def _parse_push_args(args: list[str]) -> tuple[str | None, list[str], set[str]]:
@@ -156,7 +156,7 @@ class Repo:
             return self.refs(src.split("*", 1)[0])
         return [src]
 
-    def _base_for(self, ref: str, remote: str) -> str:
+    def base_for(self, ref: str, remote: str) -> str:
         """The newest commit of `ref` that `remote` already has, or the empty tree if none.
 
         Same-named remote branch first. A new branch or a tag is compared with whatever the

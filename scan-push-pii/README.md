@@ -1,7 +1,7 @@
 # scan-push-pii
 
-A Claude Code `PreToolUse` hook that runs before every `git push` Claude issues.
-It reads what the push would send and decides:
+A scan of what a `git push` would send, run two ways: as a Claude Code `PreToolUse` hook before
+every push Claude issues, and as a git `pre-push` hook for pushes typed in a terminal. It decides:
 
 | Found | Tier | What happens |
 |---|---|---|
@@ -19,12 +19,23 @@ too, the log holds a hash of the command, and a crash denies the push with a rea
 ## Install
 
 ```bash
-ln -sf "$PWD/scan-push-pii/scan-push-pii.py" ~/.claude/hooks/scan-push-pii.py
+sh scan-push-pii/install.sh
 ```
 
-The entry script finds its `pushscan/` package through the symlink. Merge
-`claude-code.settings.json` into `~/.claude/settings.json` (keep `onFailure: block`), then
-open `/hooks` in Claude Code once.
+That links `~/.claude/hooks/scan-push-pii.py` to the entry script (it finds its `pushscan/`
+package through the symlink) and sets `git config --global core.hooksPath` to `git-hooks/`, so
+`git-hooks/pre-push` runs on every terminal push. Then merge `claude-code.settings.json` into
+`~/.claude/settings.json` (keep `onFailure: block`) and open `/hooks` in Claude Code once.
+
+The script refuses to change a `core.hooksPath` that already points elsewhere. A repository
+that sets its own `core.hooksPath` (husky, lefthook) does not run the global one: copy or
+symlink `git-hooks/pre-push` into that folder.
+
+### In a terminal
+
+The pre-push hook prints the same report to stderr and exits 1. There is no ask step: an
+ASK-tier item blocks too, with its fingerprint, and the allowlist is the way to keep it.
+Secrets and protected files cannot be kept.
 
 ## Local state (never in the repo)
 
@@ -47,6 +58,9 @@ pushscan/detectors.py   one Detector + one scorer per kind
 pushscan/scan.py        tree, outgoing commits, added lines → Findings
 pushscan/policy.py      threshold, tier → action, state files, the text Claude receives
 pushscan/findings.py    Hit, Finding, mask(), fingerprint()
+pushscan/prepush.py     git pre-push entry: stdin ref lines → report on stderr, exit 1
+git-hooks/pre-push      the file git runs (core.hooksPath)
+install.sh              symlink + core.hooksPath
 tests/                  python3 -m unittest discover -s tests
 ```
 
