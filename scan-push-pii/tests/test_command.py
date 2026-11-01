@@ -228,3 +228,15 @@ class Wrappers(unittest.TestCase):
 
     def test_export_git_dir_persists_across_segments(self):
         self.assertEqual(one("export GIT_DIR=/r1/.git; git push").cwd, "/r1")
+
+
+class OtherPushShapes(unittest.TestCase):
+    """Reviewer items 6 and 7: aliases given on the command line, send-pack, submodule foreach, gh flags."""
+    def test_inline_alias_via_dash_c(self):
+        push = one("git -c alias.x=push x")
+        self.assertEqual(push.subcommand, "push")
+        self.assertTrue(push.certain)
+
+    def test_inline_alias_via_git_config_parameters(self):
+        push = one("GIT_CONFIG_PARAMETERS=\"'alias.x=push'\" git x")
+        self.assertTrue(push.certain)
