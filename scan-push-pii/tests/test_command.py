@@ -190,3 +190,21 @@ class MultiLineAndKeywords(unittest.TestCase):
 
     def test_negated(self):
         self.assertEqual(len(find_pushes("! git push", CWD)), 1)
+
+
+class Wrappers(unittest.TestCase):
+    """Reviewer item 3 and 5: programs that run another program."""
+    def test_command_exec_nohup_time_nice(self):
+        for w in ("command git push", "exec git push", "nohup git push", "time git push", "nice git push",
+                  "nice -n 5 git push", "timeout 30 git push", "sudo git push", "caffeinate -i git push"):
+            self.assertEqual(len(find_pushes(w, CWD)), 1, w)
+
+    def test_eval_string(self):
+        self.assertEqual(len(find_pushes('eval "git push origin main"', CWD)), 1)
+
+    def test_backticks(self):
+        self.assertEqual(len(find_pushes("echo `git push`", CWD)), 1)
+
+    def test_xargs_git_is_a_candidate(self):
+        push = one("echo push | xargs git")
+        self.assertFalse(push.certain)
