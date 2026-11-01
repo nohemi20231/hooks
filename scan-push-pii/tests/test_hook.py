@@ -233,3 +233,13 @@ class StateFiles(HookCase):
         self.assertIn("deny", log)
         self.assertIn("config.py:1", log)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, log)
+
+
+class NothingRawLeavesTheScan(HookCase):
+    """Reviewer items 9, 10, 11: paths, commands and error text can carry the value too."""
+    def test_command_text_is_not_logged(self):
+        repo = make_repo(self.root)
+        run = self.run_hook(f"git commit -qm 'rotate {FAKE_ANTHROPIC_KEY}' --allow-empty && git push", repo)
+        log = read_bytes(os.path.join(self.state, "scan-push.log")).decode()
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, log)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
