@@ -116,17 +116,41 @@ class PersonalData(unittest.TestCase):
     def test_work_email_scores_below_threshold(self):
         self.assertEqual(hits(f"mail {WORK_EMAIL}", "notes.md")[0].confidence, 0.75)
 
+    def test_placeholder_email_is_ignored(self):
+        self.assertEqual(names("your-email@gmail.com", "notes.md"), [])
+
+    def test_example_domain_email_is_ignored(self):
+        self.assertEqual(names("help@example.com", "notes.md"), [])
+
     def test_e164_phone(self):
         self.assertEqual(hits(E164_PHONE, "notes.md")[0].confidence, 0.85)
 
     def test_us_phone_scores_low(self):
         self.assertEqual(hits(US_PHONE, "notes.md")[0].confidence, 0.60)
 
+    def test_555_01xx_fictional_phone_is_ignored(self):
+        self.assertEqual(names("call 214-555-0100", "notes.md"), [])
+
+    def test_phone_after_support_label_is_found(self):
+        self.assertEqual(names(f"support: {US_PHONE_DASHED}", "notes.md"), ["phone-us"])
+
+    def test_semver_is_not_a_phone(self):
+        self.assertEqual(names("version 214.867.5309", "notes.md"), [])
+
     def test_valid_ssn(self):
         self.assertEqual(names(f"ssn {SSN}", "notes.md"), ["ssn"])
 
+    def test_all_zero_ssn_is_ignored(self):
+        self.assertEqual(names("000-00-0000", "notes.md"), [])
+
     def test_luhn_valid_card(self):
         self.assertEqual(names(CARD, "notes.md"), ["card-number"])
+
+    def test_repeated_digit_card_is_ignored(self):
+        self.assertEqual(names("4111111111111111", "notes.md"), [])
+
+    def test_timestamp_is_not_a_card(self):
+        self.assertEqual(names("1730400000000", "notes.md"), [])
 
     def test_public_ip_only_when_the_line_calls_it_a_host(self):
         self.assertEqual(names(f"host = {PUBLIC_IP}", "notes.md"), ["public-ipv4"])
