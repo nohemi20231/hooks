@@ -102,6 +102,12 @@ class CleanAndNonPush(HookCase):
         run = self.run_hook("git push", repo)
         self.assertTrue(run.allowed, run.stdout + run.stderr)
 
+    def test_not_a_push_is_allowed_without_scanning(self):
+        repo = make_repo(self.root, files={"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
+        self.assertTrue(self.run_hook("git commit -m 'note: run git push later'", repo).allowed)
+        self.assertTrue(self.run_hook("git stash push", repo).allowed)
+        self.assertTrue(self.run_hook("echo 'git push'", repo).allowed)
+
     def test_non_repo_cwd_is_allowed(self):
         self.assertTrue(self.run_hook("git push", self.root).allowed)
 

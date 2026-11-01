@@ -39,6 +39,23 @@ class PlainPush(unittest.TestCase):
         self.assertEqual(one("git push --force origin main").args, ["--force", "origin", "main"])
 
 
+class NotAPush(unittest.TestCase):
+    def test_stash_push_is_not_a_push(self):
+        self.assertEqual(find_pushes("git stash push", CWD), [])
+
+    def test_commit_message_mentioning_push(self):
+        self.assertEqual(find_pushes("git commit -m 'note: run git push later'", CWD), [])
+
+    def test_echo_push(self):
+        self.assertEqual(find_pushes("echo 'git push'", CWD), [])
+
+    def test_unrelated_command(self):
+        self.assertEqual(find_pushes("ls -la", CWD), [])
+
+    def test_git_without_subcommand(self):
+        self.assertEqual(find_pushes("git", CWD), [])
+
+
 class GlobalOptions(unittest.TestCase):
     def test_dash_C_absolute(self):
         push = one("git -C /abs/path/r1 push")
