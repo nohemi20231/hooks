@@ -178,3 +178,15 @@ class MultiLineAndKeywords(unittest.TestCase):
 
     def test_heredoc_body_line(self):
         self.assertEqual(len(find_pushes("bash <<EOF\ngit push\nEOF", CWD)), 1)
+
+    def test_brace_group(self):
+        self.assertEqual(len(find_pushes("true && { git push; }", CWD)), 1)
+
+    def test_for_loop(self):
+        self.assertEqual(one("for r in origin; do git push $r; done").subcommand, "push")
+
+    def test_if_then(self):
+        self.assertEqual(len(find_pushes("if true; then git push; fi", CWD)), 1)
+
+    def test_negated(self):
+        self.assertEqual(len(find_pushes("! git push", CWD)), 1)
