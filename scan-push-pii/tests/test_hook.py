@@ -272,3 +272,22 @@ class AwkwardContent(HookCase):
         run = self.run_hook('cd "$(git rev-parse --show-toplevel)" && git push', repo)
         self.assertTrue(run.denied)
         self.assertIn("anthropic-key", run.reason)
+
+
+class LoggingNeverChangesTheDecision(HookCase):
+    """Reviewer item 24."""
+    def test_unwritable_state_dir_still_denies_with_json(self):
+        repo = make_repo(self.root)
+        commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
+        os.chmod(self.state, 0o500)
+        try:
+            run = self.run_hook("git push", repo)
+        finally:
+            os.chmod(self.state, 0o700)
+        self.assertTrue(run.denied, run.stdout + run.stderr)
+        self.assertEqual(run.exit_code, 0)
+        self.assertNotIn("Traceback", run.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
