@@ -8,6 +8,9 @@ It reads what the push would send and decides:
 | Secret (API key, private key, credential URL, bearer token, secret assignment) anywhere in the pushed tree, in any outgoing commit, or in a commit message | BLOCK | Push denied. No threshold, no bypass, no allowlist. Claude is told to move the value out and rewrite the commits. |
 | Personal data (email, phone, SSN, card number, public IP) on a line the push adds, confidence ≥ 0.80 | AUTO | Push denied. Claude redacts without asking. |
 | Personal data, confidence < 0.80 | ASK | Push denied. Claude asks you per item: redact, or keep (its fingerprint goes to the allowlist). |
+| Protected file: transcript, conversation export, journal, diary, memory, personal notes (by path, or by content for `.json` / `.jsonl`) | BLOCK | Like a secret. First-person prose inside such a file blocks too. |
+| Your own name or handle (patterns from the private `pii-own-names` file, 0.90 by default) | AUTO | A copyright line or a LICENSE / NOTICE / AUTHORS file drops it to ASK. |
+| First-person prose (the writer talking about themself) on an added line of a `.md` / `.txt` / `.json` / `.yaml` file, 0.65 | ASK | Code, comments and fragments under five words are not prose. |
 
 Nothing raw leaves the scan: values are masked to at most 2 + 2 characters, paths are masked
 too, the log holds a hash of the command, and a crash denies the push with a readable reason
@@ -30,6 +33,7 @@ open `/hooks` in Claude Code once.
 | `~/.claude/hooks/.pii-salt` | random salt for fingerprints, mode 0600, made on first run |
 | `~/.claude/hooks/pii-allowlist` | one fingerprint per line: ASK-tier personal data you chose to keep |
 | `~/.claude/hooks/scan-push.log` | one masked line per decision |
+| `~/.claude/hooks/pii-own-names` | your names: one regex per line, optional confidence (`vellanquist 0.70`); `#` comments. Missing file: names are not scanned. A bad line denies every push until fixed. |
 
 `PUSHSCAN_STATE_DIR` moves all three (the tests point it at a temp folder).
 

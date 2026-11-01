@@ -146,6 +146,19 @@ class SecretsInTheTree(HookCase):
         commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
         self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
 
+    def test_django_model_is_not_a_secret(self):
+        repo = make_repo(self.root)
+        commit(repo, {"models.py": "password = models.CharField(max_length=128)\napi_key: Optional[str] = None\n"})
+        self.assertTrue(self.run_hook("git push", repo).allowed)
+
+    def test_secret_removed_before_head_but_in_an_outgoing_commit_blocks(self):
+        repo = make_repo(self.root)
+        commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'}, "add key")
+        commit(repo, {"config.py": 'KEY = os.environ["KEY"]\n'}, "remove key")
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("anthropic-key", run.reason)
+
     def test_large_tree_scans_within_the_hook_timeout(self):
         repo = make_repo(self.root)
         files = {f"pkg/m{i:04d}/file{i}.py": f"value_{i} = {i}\n" for i in range(3000)}
@@ -222,6 +235,23 @@ class FailClosedWithAReadableReason(HookCase):
 
 
 class PersonalData(HookCase):
+    def test_personal_email_in_outgoing_commit_is_auto_tier_without_fingerprint(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"contact {GMAIL}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        auto_block = run.reason.split("redact WITHOUT asking")[1].split("\n\n")[0]
+        self.assertIn("email", auto_block)
+        self.assertNotIn("fingerprint=", auto_block)
+
+    def test_us_phone_is_ask_tier_with_fingerprint(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"office {US_PHONE}\n"})
+        run = self.run_hook("git push", repo)
+        ask_block = run.reason.split("ASK THE USER")[1]
+        self.assertIn("phone-us", ask_block)
+        self.assertIn("fingerprint=", ask_block)
+
     def test_allowlist_hides_an_ask_tier_item(self):
         repo = make_repo(self.root)
         commit(repo, {"notes.md": f"office {US_PHONE}\n"})
@@ -230,6 +260,25 @@ class PersonalData(HookCase):
         with open(os.path.join(self.state, "pii-allowlist"), "w") as f:
             f.write("﻿# comment\r\n" + fp + "\r\n")
         self.assertTrue(self.run_hook("git push", repo).allowed)
+
+    def test_allowlist_cannot_hide_an_auto_tier_item(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"contact {GMAIL}\n"})
+        from pushscan.findings import fingerprint   # computed with the real salt the hook will use
+        salt = read_bytes(os.path.join(self.state, ".pii-salt")) if os.path.exists(os.path.join(self.state, ".pii-salt")) else None
+        self.run_hook("git push", repo)
+        salt = read_bytes(os.path.join(self.state, ".pii-salt"))
+        with open(os.path.join(self.state, "pii-allowlist"), "w") as f:
+            f.write(fingerprint(salt, "notes.md", "email", GMAIL) + "\n")
+        self.assertTrue(self.run_hook("git push", repo).denied)
+
+    def test_pii_found_with_diff_noprefix_and_non_ascii_path(self):
+        repo = make_repo(self.root)
+        git(repo, "config", "diff.noprefix", "true")
+        commit(repo, {"café.md": f"contact {GMAIL}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("café.md", run.reason)
 
     def test_pii_already_on_the_remote_is_not_reported_again(self):
         repo = make_repo(self.root, files={"notes.md": f"contact {GMAIL}\n"})
@@ -272,8 +321,75 @@ class NothingRawLeavesTheScan(HookCase):
         self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
 
 
+class MoreRefsAndRemotes(HookCase):
+    """Reviewer items 13, 14, 17, 18: tags, pushDefault, commit messages, merge commits."""
+    def _tagged_secret_repo(self):
+        repo = make_repo(self.root)
+        git(repo, "checkout", "-qb", "leak")
+        commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
+        git(repo, "tag", "v1")
+        git(repo, "checkout", "-q", "main")
+        git(repo, "branch", "-qD", "leak")
+        return repo
+
+    def test_push_tags_is_scanned(self):
+        repo = self._tagged_secret_repo()
+        self.assertTrue(self.run_hook("git push --tags", repo).denied)
+        self.assertTrue(self.run_hook("git push --follow-tags origin main", repo).denied)
+        self.assertTrue(self.run_hook("git push --mirror origin", repo).denied)
+
+    def test_wildcard_tag_refspec_is_scanned(self):
+        repo = self._tagged_secret_repo()
+        self.assertTrue(self.run_hook("git push origin 'refs/tags/*:refs/tags/*'", repo).denied)
+
+    def test_push_default_remote_is_used_for_the_base(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"mail {GMAIL}\n"})
+        git(repo, "push", "-q", "origin", "main")                    # origin already has the address
+        fork = os.path.join(self.root, "fork.git")
+        git(self.root, "init", "-q", "--bare", "-b", "main", fork)
+        git(repo, "remote", "add", "fork", fork)
+        git(repo, "config", "remote.pushDefault", "fork")
+        run = self.run_hook("git push", repo)                        # goes to fork, which has nothing
+        self.assertTrue(run.denied, run.stdout)
+        self.assertIn("email", run.reason)
+
+    def test_secret_in_a_commit_message_blocks(self):
+        repo = make_repo(self.root)
+        git(repo, "commit", "-q", "--allow-empty", "-m", f"hotfix: key was {FAKE_ANTHROPIC_KEY}")
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("commit message", run.reason)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
+
+    def test_secret_only_in_a_merge_commit_blocks(self):
+        repo = make_repo(self.root)
+        git(repo, "checkout", "-qb", "feature")
+        commit(repo, {"f.txt": "feature\n"})
+        git(repo, "checkout", "-q", "main")
+        commit(repo, {"m.txt": "main\n"})
+        git(repo, "merge", "-q", "--no-ff", "--no-commit", "feature")
+        write(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "merge")
+        git(repo, "rm", "-q", "config.py")
+        git(repo, "commit", "-qm", "remove")
+        self.assertTrue(self.run_hook("git push", repo).denied)
+
+
 class AwkwardContent(HookCase):
     """Reviewer items 15, 16, 22, 23: quoted paths, binaries, non-UTF-8 lines, $(...) in cd."""
+    def test_quoted_path_in_diff_is_scanned(self):
+        repo = make_repo(self.root)
+        commit(repo, {'we"ird.md': f"mail {GMAIL}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied, run.stdout)
+
+    def test_secret_inside_a_binary_blob_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"app.db": b"SQLite\x00format\n" + FAKE_ANTHROPIC_KEY.encode() + b"\n"})
+        self.assertTrue(self.run_hook("git push", repo).denied)
+
     def test_non_utf8_added_line_does_not_fail_closed(self):
         repo = make_repo(self.root)
         commit(repo, {"menu.txt": b"caf\xe9 au lait\n"})
@@ -304,3 +420,76 @@ class LoggingNeverChangesTheDecision(HookCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OwnNamesEndToEnd(HookCase):
+    """D7: names in pii-own-names (private, in the state dir); made-up names here."""
+    def _names(self, text):
+        with open(os.path.join(self.state, "pii-own-names"), "w") as f:
+            f.write(text)
+
+    def test_own_name_is_auto_tier(self):
+        self._names("zandrika(vell)?\nvellanquist 0.70\n")
+        repo = make_repo(self.root)
+        commit(repo, {"README.md": "Maintained by Zandrika Vellanquist\n"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("own-name", run.reason.split("redact WITHOUT asking")[1])
+
+    def test_surname_alone_is_ask_tier(self):
+        self._names("zandrika(vell)?\nvellanquist 0.70\n")
+        repo = make_repo(self.root)
+        commit(repo, {"README.md": "reviewed by Vellanquist\n"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("own-name", run.reason.split("ASK THE USER")[1])
+
+    def test_own_name_in_a_path_is_masked_in_line_findings(self):
+        self._names("zandrika\n")
+        repo = make_repo(self.root)
+        commit(repo, {"notes-zandrika.md": f"office {US_PHONE}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertNotIn("zandrika", run.reason.lower())
+
+    def test_bad_names_file_fails_closed_with_a_reason(self):
+        self._names("(unclosed\n")
+        repo = make_repo(self.root)
+        commit(repo, {"a.py": "x = 1\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("pii-own-names", run.reason)
+        self.assertNotIn("Traceback", run.stdout + run.stderr)
+
+    def test_without_a_names_file_names_are_not_scanned(self):
+        repo = make_repo(self.root)
+        commit(repo, {"README.md": "Maintained by Zandrika Vellanquist\n"})
+        self.assertTrue(self.run_hook("git push", repo).allowed)
+
+
+class ProtectedFiles(HookCase):
+    """D8: protected paths and transcript content block like secrets; first-person prose asks."""
+    def test_transcript_file_is_blocked_like_a_secret(self):
+        repo = make_repo(self.root)
+        commit(repo, {"data/transcripts/2026-10-31.txt": "plain text\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("protected-path", run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0])
+
+    def test_transcript_content_in_a_json_file_is_blocked(self):
+        repo = make_repo(self.root)
+        commit(repo, {"data/export.json": '{"role": "user", "content": "hi"}\n{"role": "assistant", "content": "hello"}\n'})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("transcript-content", run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0])
+
+    def test_first_person_inside_journal_is_blocked(self):
+        repo = make_repo(self.root)
+        commit(repo, {"journal/day.md": "I am not sure I can do this again today.\n"})
+        run = self.run_hook("git push", repo)
+        secrets_block = run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0]
+        self.assertIn("first-person", secrets_block)
+
+    def test_first_person_prose_is_ask_tier(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": "Today I felt that my session went badly and I am tired.\n"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("first-person", run.reason.split("ASK THE USER")[1])

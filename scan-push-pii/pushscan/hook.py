@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from . import policy
 from .command import Push, find_pushes
+from .detectors import set_own_names
 from .findings import Finding
 from .gitio import GitError, Repo
 from .policy import Action, Report, action_for, can_be_allowlisted
@@ -37,6 +38,7 @@ def _main() -> int:
         pushes = find_pushes(command, cwd)
         if not pushes:
             return 0
+        set_own_names(policy.load_own_names())      # D7: the owner's names, from the private file
         report = scan_pushes(pushes)
     except Exception as error:                      # fail closed, but with a reason instead of a traceback
         reason = masked_text(_describe(error))

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from enum import Enum
 
@@ -13,6 +14,8 @@ STATE_DIR = os.environ.get("PUSHSCAN_STATE_DIR") or os.path.expanduser("~/.claud
 ALLOWLIST_PATH = os.path.join(STATE_DIR, "pii-allowlist")
 SALT_PATH = os.path.join(STATE_DIR, ".pii-salt")
 LOG_PATH = os.path.join(STATE_DIR, "scan-push.log")
+OWN_NAMES_PATH = os.path.join(STATE_DIR, "pii-own-names")   # D7: private; one regex per line, optional confidence
+OWN_NAME_DEFAULT_CONFIDENCE = 0.90
 
 
 class Action(Enum):
@@ -56,6 +59,40 @@ def load_allowlist() -> set[str]:
             return {line.strip() for line in f if line.strip() and not line.lstrip().startswith("#")}
     except FileNotFoundError:
         return set()
+
+
+class OwnNamesError(ValueError):
+    """The private names file cannot be used; the message never repeats a line of it."""
+
+
+def load_own_names(path: str = OWN_NAMES_PATH) -> list[tuple[str, float]]:
+    """(regex, confidence) per line of the owner's names file: `pattern` or `pattern 0.70`.
+    Comments start with #. The file lives outside every repository; tests use made-up names."""
+    try:
+        with open(path, encoding="utf-8-sig") as f:
+            lines = f.read().split("\n")
+    except FileNotFoundError:
+        return []
+    entries: list[tuple[str, float]] = []
+    for number, raw in enumerate(lines, 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        pattern, confidence = line, OWN_NAME_DEFAULT_CONFIDENCE
+        parts = line.rsplit(None, 1)
+        if len(parts) == 2:
+            try:
+                pattern, confidence = parts[0], float(parts[1])
+            except ValueError:
+                pass                                  # the last word is part of the pattern
+        if not 0.0 <= confidence <= 1.0:
+            raise OwnNamesError(f"pii-own-names line {number}: confidence must be between 0 and 1")
+        try:
+            re.compile(pattern, re.I)
+        except re.error as error:
+            raise OwnNamesError(f"pii-own-names line {number}: not a valid pattern ({error.msg})") from None
+        entries.append((pattern, confidence))
+    return entries
 
 
 def append_log(line: str) -> None:

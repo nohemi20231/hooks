@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from .detectors import scan_path, scan_text
+from .detectors import looks_like_transcript, scan_path, scan_text
 from .findings import Finding, Hit, Tier, fingerprint, mask
 from .gitio import PushRange, Repo
 
@@ -13,13 +13,15 @@ PERSONAL_SKIP_PATHS = re.compile(
     r"|\.min\.(js|css)$|\.map$"
 )
 PERSONAL_MAX_LINE_CHARS = 20000      # longer lines are data blobs; secrets are still scanned on them
+TRANSCRIPT_SUFFIXES = (".jsonl", ".json")   # checked by content too: a conversation export under any name
 
 
 def masked_path(path: str) -> str:
     """The path with every secret or name inside it masked, for reports and logs."""
     shown = path
     for hit in sorted(scan_path(path), key=lambda h: -h.start):
-        shown = shown[:hit.start] + mask(hit.value) + shown[hit.end:]
+        if hit.detector != "protected-path":              # that hit is the whole path, not a value in it
+            shown = shown[:hit.start] + mask(hit.value) + shown[hit.end:]
     return shown
 
 
@@ -27,7 +29,8 @@ def masked_text(text: str) -> str:
     """Free text (an error message, a command) with every detectable value masked."""
     shown = text
     for hit in sorted(scan_text(text, "message.txt"), key=lambda h: -h.start):
-        shown = shown[:hit.start] + mask(hit.value) + shown[hit.end:]
+        if hit.detector != "first-person":                # a pronoun in an error message reveals nothing
+            shown = shown[:hit.start] + mask(hit.value) + shown[hit.end:]
     return shown
 
 
@@ -49,13 +52,16 @@ class Scanner:
     # ---------------------------------------------------------------- secrets
 
     def secrets_in_tree(self, ref: str) -> list[Finding]:
-        """Every secret in the whole tree of `ref`: all of it would be on GitHub."""
+        """Every secret or protected file in the whole tree of `ref`: all of it would be on GitHub."""
         findings: list[Finding] = []
         seen: set[tuple] = set()
         for blob in self.repo.tree_blobs(ref):
             for hit in scan_path(blob.path):
                 if hit.tier is Tier.SECRET:
                     self._add(findings, seen, self._finding(hit, blob.path, 0, ref))
+            if blob.path.endswith(TRANSCRIPT_SUFFIXES) and looks_like_transcript(blob.text):
+                hit = Hit("transcript-content", Tier.SECRET, 0.95, blob.path, 0, 0)
+                self._add(findings, seen, self._finding(hit, blob.path, 0, ref))
             for number, line in enumerate(blob.text.split("\n"), 1):
                 for hit in scan_text(line, blob.path):
                     if hit.tier is Tier.SECRET:
