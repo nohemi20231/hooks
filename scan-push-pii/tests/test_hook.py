@@ -251,3 +251,9 @@ class NothingRawLeavesTheScan(HookCase):
         self.assertTrue(run.denied)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
+
+    def test_error_text_is_masked(self):
+        run = self.run_hook(f"cd /tmp/{FAKE_ANTHROPIC_KEY} && git push", self.root)
+        self.assertTrue(run.denied)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
