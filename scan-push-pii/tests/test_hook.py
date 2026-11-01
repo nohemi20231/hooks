@@ -235,6 +235,23 @@ class FailClosedWithAReadableReason(HookCase):
 
 
 class PersonalData(HookCase):
+    def test_personal_email_in_outgoing_commit_is_auto_tier_without_fingerprint(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"contact {GMAIL}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        auto_block = run.reason.split("redact WITHOUT asking")[1].split("\n\n")[0]
+        self.assertIn("email", auto_block)
+        self.assertNotIn("fingerprint=", auto_block)
+
+    def test_us_phone_is_ask_tier_with_fingerprint(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"office {US_PHONE}\n"})
+        run = self.run_hook("git push", repo)
+        ask_block = run.reason.split("ASK THE USER")[1]
+        self.assertIn("phone-us", ask_block)
+        self.assertIn("fingerprint=", ask_block)
+
     def test_allowlist_hides_an_ask_tier_item(self):
         repo = make_repo(self.root)
         commit(repo, {"notes.md": f"office {US_PHONE}\n"})
@@ -243,6 +260,17 @@ class PersonalData(HookCase):
         with open(os.path.join(self.state, "pii-allowlist"), "w") as f:
             f.write("﻿# comment\r\n" + fp + "\r\n")
         self.assertTrue(self.run_hook("git push", repo).allowed)
+
+    def test_allowlist_cannot_hide_an_auto_tier_item(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"contact {GMAIL}\n"})
+        from pushscan.findings import fingerprint   # computed with the real salt the hook will use
+        salt = read_bytes(os.path.join(self.state, ".pii-salt")) if os.path.exists(os.path.join(self.state, ".pii-salt")) else None
+        self.run_hook("git push", repo)
+        salt = read_bytes(os.path.join(self.state, ".pii-salt"))
+        with open(os.path.join(self.state, "pii-allowlist"), "w") as f:
+            f.write(fingerprint(salt, "notes.md", "email", GMAIL) + "\n")
+        self.assertTrue(self.run_hook("git push", repo).denied)
 
     def test_pii_found_with_diff_noprefix_and_non_ascii_path(self):
         repo = make_repo(self.root)
