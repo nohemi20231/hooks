@@ -243,3 +243,11 @@ class NothingRawLeavesTheScan(HookCase):
         log = read_bytes(os.path.join(self.state, "scan-push.log")).decode()
         self.assertNotIn(FAKE_ANTHROPIC_KEY, log)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
+
+    def test_secret_file_name_is_masked_in_line_findings_too(self):
+        repo = make_repo(self.root)
+        commit(repo, {f"keys/{FAKE_ANTHROPIC_KEY}.txt": f"contact {GMAIL}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
