@@ -354,6 +354,14 @@ class MoreRefsAndRemotes(HookCase):
         self.assertTrue(run.denied, run.stdout)
         self.assertIn("email", run.reason)
 
+    def test_secret_in_a_commit_message_blocks(self):
+        repo = make_repo(self.root)
+        git(repo, "commit", "-q", "--allow-empty", "-m", f"hotfix: key was {FAKE_ANTHROPIC_KEY}")
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("commit message", run.reason)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
+
 
 class AwkwardContent(HookCase):
     """Reviewer items 15, 16, 22, 23: quoted paths, binaries, non-UTF-8 lines, $(...) in cd."""
