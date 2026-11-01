@@ -117,6 +117,11 @@ class CleanAndNonPush(HookCase):
         self.assertNotIn("Traceback", run.stdout + run.stderr)
         self.assertIn("payload", run.reason)
 
+    def test_empty_bare_repo_cwd_is_allowed(self):
+        bare = os.path.join(self.root, "bare.git")
+        git(self.root, "init", "-q", "--bare", bare)
+        self.assertTrue(self.run_hook("git push", bare).allowed)
+
 
 class SecretsInTheTree(HookCase):
     def test_secret_at_head_blocks(self):
@@ -312,6 +317,14 @@ class PersonalData(HookCase):
 
 
 class StateFiles(HookCase):
+    def test_empty_salt_file_is_regenerated(self):
+        salt_path = os.path.join(self.state, ".pii-salt")
+        open(salt_path, "wb").close()
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"office {US_PHONE}\n"})
+        self.run_hook("git push", repo)
+        self.assertEqual(len(read_bytes(salt_path)), 32)
+
     def test_every_decision_is_logged_locally_masked(self):
         repo = make_repo(self.root)
         commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
