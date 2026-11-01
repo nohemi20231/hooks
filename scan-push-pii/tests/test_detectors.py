@@ -268,3 +268,26 @@ class OwnNamesFile(unittest.TestCase):
         path = self._file("zandrika 1.5\n")
         with self.assertRaises(policy.OwnNamesError):
             policy.load_own_names(path)
+
+
+class Paths(unittest.TestCase):
+    """D8: transcripts, journals, memory and personal notes are blocked like secrets."""
+    def test_transcript_path_is_protected(self):
+        self.assertEqual([h.detector for h in scan_path("data/transcripts/2026-10-31.txt")], ["protected-path"])
+        self.assertEqual(scan_path("data/transcripts/2026-10-31.txt")[0].tier, Tier.SECRET)
+
+    def test_jsonl_is_protected(self):
+        self.assertEqual([h.detector for h in scan_path("export/session.jsonl")], ["protected-path"])
+
+    def test_claude_projects_is_protected(self):
+        self.assertEqual([h.detector for h in scan_path(".claude/projects/x/memory/MEMORY.md")], ["protected-path"])
+
+    def test_chat_feature_code_is_not_protected(self):
+        self.assertEqual(scan_path("src/chat/ChatWindow.tsx"), [])
+
+    def test_chat_log_is_protected(self):
+        self.assertEqual([h.detector for h in scan_path("logs/chat-log.txt")], ["protected-path"])
+
+    def test_first_person_inside_protected_path_is_blocked(self):
+        h = hits("I am not sure I can do this again.", "journal/2026.md")
+        self.assertEqual(h[0].tier, Tier.SECRET)
