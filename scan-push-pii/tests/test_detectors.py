@@ -9,8 +9,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pushscan import policy  # noqa: E402
 from pushscan.detectors import is_protected_path, looks_like_transcript, scan_path, scan_text, set_own_names, Tier  # noqa: E402
 from fixtures import (ANTHROPIC_KEY, AWS_KEY, AWS_SECRET, CARD, E164_PHONE, ENCRYPTED_KEY_HEADER, GMAIL,  # noqa: E402
-                      JWT_IO_SAMPLE, JWT_OTHER, PRIVATE_KEY_HEADER, PUBLIC_IP, RANDOM, RANDOM_LONG, SSN, US_PHONE,
-                      US_PHONE_DASHED, WORK_EMAIL, assign, bearer, url)
+                      GOOGLE_AI_KEY, JWT_IO_SAMPLE, JWT_OTHER, PRIVATE_KEY_HEADER, PUBLIC_IP, RANDOM, RANDOM_LONG, SSN,
+                      TWILIO_SID, US_PHONE, US_PHONE_DASHED, WORK_EMAIL, ZERO_TWILIO_SID, assign, bearer, url)
 
 
 def hits(text, path="app.py"):
@@ -35,6 +35,15 @@ class VendorKeys(unittest.TestCase):
 
     def test_key_with_example_inside_is_a_placeholder(self):
         self.assertEqual(names('sk-ant-api03-EXAMPLEEXAMPLEEXAMPLEEXAMPLE'), [])
+
+    def test_twilio_sid_is_a_secret(self):
+        self.assertEqual(names(assign("TWILIO_ACCOUNT_SID", TWILIO_SID, quote="", sep="=")), ["twilio-sid"])
+
+    def test_all_zero_twilio_sid_is_a_placeholder(self):
+        self.assertEqual(names(assign("export TWILIO_ACCOUNT_SID", ZERO_TWILIO_SID, quote="", sep="="), "local.env.example"), [])
+
+    def test_google_ai_studio_key_is_a_secret(self):
+        self.assertEqual(names(assign("GOOGLE_API_KEY", GOOGLE_AI_KEY)), ["google-ai-studio-key"])
 
     def test_encrypted_private_key_block(self):
         self.assertEqual(names(ENCRYPTED_KEY_HEADER), ["private-key"])
@@ -81,6 +90,12 @@ class SecretAssignments(unittest.TestCase):
 
     def test_env_lookup_is_not_a_secret(self):
         self.assertEqual(names('password = os.environ["DB_PASSWORD"]'), [])
+
+    def test_test_prefixed_literal_is_a_placeholder(self):
+        self.assertEqual(names(assign("static final String TOKEN", "test-auth-token-primary"), "ScenarioIT.java"), [])
+
+    def test_local_prefixed_literal_is_a_placeholder(self):
+        self.assertEqual(names(assign("DB_PASSWORD", "local_dev_password", quote="", sep="="), ".env"), [])
 
     def test_changeme_is_a_placeholder(self):
         self.assertEqual(names('password = "changeme"'), [])

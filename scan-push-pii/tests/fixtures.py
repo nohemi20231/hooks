@@ -13,6 +13,9 @@ def joined(*parts: str) -> str:
 # secrets
 ANTHROPIC_KEY = joined("sk-ant-api03-", "Qx7Lm2Vb9Tz4Rk8Pw1Yn6Hs3Jd5Fg0Cv")
 AWS_KEY = joined("AKIA", "Q7LM2VB9TZ4RK8PW")
+TWILIO_SID = "AC" + "f" * 32                     # one repeated character: obviously not issued
+ZERO_TWILIO_SID = "AC" + "0" * 32                # what an example env file ships; zeros are a placeholder
+GOOGLE_AI_KEY = "AQ." + "k" * 44                 # not "x": xxx is itself a placeholder marker
 RANDOM = "Xk9mPq2vL7nR4wQz"                     # random-looking; not a secret until assigned to a secret name
 RANDOM_LONG = RANDOM + "1234"
 AWS_SECRET = joined("wJalrXUtnFEMI/", "K7MDENG/bPxRfiCYzz")
