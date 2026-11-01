@@ -321,6 +321,28 @@ class NothingRawLeavesTheScan(HookCase):
         self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
 
 
+class MoreRefsAndRemotes(HookCase):
+    """Reviewer items 13, 14, 17, 18: tags, pushDefault, commit messages, merge commits."""
+    def _tagged_secret_repo(self):
+        repo = make_repo(self.root)
+        git(repo, "checkout", "-qb", "leak")
+        commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
+        git(repo, "tag", "v1")
+        git(repo, "checkout", "-q", "main")
+        git(repo, "branch", "-qD", "leak")
+        return repo
+
+    def test_push_tags_is_scanned(self):
+        repo = self._tagged_secret_repo()
+        self.assertTrue(self.run_hook("git push --tags", repo).denied)
+        self.assertTrue(self.run_hook("git push --follow-tags origin main", repo).denied)
+        self.assertTrue(self.run_hook("git push --mirror origin", repo).denied)
+
+    def test_wildcard_tag_refspec_is_scanned(self):
+        repo = self._tagged_secret_repo()
+        self.assertTrue(self.run_hook("git push origin 'refs/tags/*:refs/tags/*'", repo).denied)
+
+
 class AwkwardContent(HookCase):
     """Reviewer items 15, 16, 22, 23: quoted paths, binaries, non-UTF-8 lines, $(...) in cd."""
     def test_non_utf8_added_line_does_not_fail_closed(self):
