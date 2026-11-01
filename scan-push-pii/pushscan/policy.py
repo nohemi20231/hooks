@@ -61,6 +61,12 @@ def load_allowlist() -> set[str]:
         return set()
 
 
+def shorten_home(text: str) -> str:
+    """The home directory spells the user name: show it as ~ wherever a path is reported."""
+    home = os.path.expanduser("~")
+    return text.replace(home + os.sep, "~" + os.sep) if home and home != "~" else text
+
+
 class OwnNamesError(ValueError):
     """The private names file cannot be used; the message never repeats a line of it."""
 
@@ -131,7 +137,7 @@ class Report:
         if self.ask:
             parts.append(ASK_HEADING.format(n=len(self.ask), t=AUTO_REDACT_THRESHOLD))
             parts += [f.as_report_line(with_fingerprint=True) for f in self.ask]
-            parts.append(ASK_PROCEDURE.format(allowlist=ALLOWLIST_PATH))
+            parts.append(ASK_PROCEDURE.format(allowlist=shorten_home(ALLOWLIST_PATH)))
         return "\n".join(parts)
 
 

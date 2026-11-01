@@ -62,9 +62,9 @@ def commit(repo, files, message="change"):
 
 
 class HookRun:
-    def __init__(self, state_dir, command, cwd, tool_input=None):
+    def __init__(self, state_dir, command, cwd, tool_input=None, env=None):
         payload = {"tool_name": "Bash", "tool_input": tool_input if tool_input is not None else {"command": command}, "cwd": cwd}
-        env = dict(os.environ, PUSHSCAN_STATE_DIR=state_dir)
+        env = dict(os.environ, PUSHSCAN_STATE_DIR=state_dir, **(env or {}))
         started = time.time()
         proc = subprocess.run([sys.executable, "-I", HOOK], input=json.dumps(payload), capture_output=True, text=True, env=env)
         self.seconds = time.time() - started
@@ -363,6 +363,26 @@ class NothingRawLeavesTheScan(HookCase):
         self.assertTrue(run.denied)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
+
+    def test_state_paths_are_shown_relative_to_home(self):
+        # the home directory spells the user name; the allowlist path in an ASK report must not
+        home = os.path.join(self.root, "home-zandrikavell")
+        state = os.path.join(home, ".claude", "hooks")
+        os.makedirs(state)
+        repo = make_repo(self.root)
+        commit(repo, {"contact.md": f"office {US_PHONE}\n"})
+        run = HookRun(state, "git push", repo, env={"HOME": home})
+        self.assertTrue(run.denied, run.stdout)
+        self.assertIn("~/.claude/hooks/pii-allowlist", run.reason)
+        self.assertNotIn("zandrikavell", run.reason)
+
+    def test_home_directory_in_error_text_is_shortened(self):
+        home = os.path.join(self.root, "home-zandrikavell")
+        os.makedirs(os.path.join(home, ".claude", "hooks"))
+        run = HookRun(os.path.join(home, ".claude", "hooks"), f"cd {home}/missing && git push", self.root, env={"HOME": home})
+        self.assertTrue(run.denied)
+        self.assertNotIn("zandrikavell", run.reason)
+        self.assertIn("~/missing", run.reason)
 
     def test_error_text_is_masked(self):
         run = self.run_hook(f"cd /tmp/{FAKE_ANTHROPIC_KEY} && git push", self.root)

@@ -6,6 +6,7 @@ import re
 from .detectors import looks_like_transcript, scan_path, scan_text
 from .findings import Finding, Hit, Tier, fingerprint, mask
 from .gitio import PushRange, Repo
+from .policy import shorten_home
 
 # lockfiles and bundles are skipped for personal data only; secrets are scanned everywhere
 PERSONAL_SKIP_PATHS = re.compile(
@@ -26,8 +27,8 @@ def masked_path(path: str) -> str:
 
 
 def masked_text(text: str) -> str:
-    """Free text (an error message, a command) with every detectable value masked."""
-    shown = text
+    """Free text (an error message, a command) with every detectable value masked and ~ for home."""
+    shown = shorten_home(text)
     for hit in sorted(scan_text(text, "message.txt"), key=lambda h: -h.start):
         if hit.detector != "first-person":                # a pronoun in an error message reveals nothing
             shown = shown[:hit.start] + mask(hit.value) + shown[hit.end:]
