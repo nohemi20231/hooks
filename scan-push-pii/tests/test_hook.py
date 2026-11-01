@@ -239,6 +239,14 @@ class PersonalData(HookCase):
             f.write("﻿# comment\r\n" + fp + "\r\n")
         self.assertTrue(self.run_hook("git push", repo).allowed)
 
+    def test_pii_found_with_diff_noprefix_and_non_ascii_path(self):
+        repo = make_repo(self.root)
+        git(repo, "config", "diff.noprefix", "true")
+        commit(repo, {"café.md": f"contact {GMAIL}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("café.md", run.reason)
+
     def test_pii_already_on_the_remote_is_not_reported_again(self):
         repo = make_repo(self.root, files={"notes.md": f"contact {GMAIL}\n"})
         commit(repo, {"other.md": "plain\n"})
