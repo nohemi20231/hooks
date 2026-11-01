@@ -342,6 +342,18 @@ class MoreRefsAndRemotes(HookCase):
         repo = self._tagged_secret_repo()
         self.assertTrue(self.run_hook("git push origin 'refs/tags/*:refs/tags/*'", repo).denied)
 
+    def test_push_default_remote_is_used_for_the_base(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"mail {GMAIL}\n"})
+        git(repo, "push", "-q", "origin", "main")                    # origin already has the address
+        fork = os.path.join(self.root, "fork.git")
+        git(self.root, "init", "-q", "--bare", "-b", "main", fork)
+        git(repo, "remote", "add", "fork", fork)
+        git(repo, "config", "remote.pushDefault", "fork")
+        run = self.run_hook("git push", repo)                        # goes to fork, which has nothing
+        self.assertTrue(run.denied, run.stdout)
+        self.assertIn("email", run.reason)
+
 
 class AwkwardContent(HookCase):
     """Reviewer items 15, 16, 22, 23: quoted paths, binaries, non-UTF-8 lines, $(...) in cd."""
