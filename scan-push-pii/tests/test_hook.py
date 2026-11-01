@@ -134,6 +134,15 @@ class SecretsInTheTree(HookCase):
         commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
         self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
 
+    def test_large_tree_scans_within_the_hook_timeout(self):
+        repo = make_repo(self.root)
+        files = {f"pkg/m{i:04d}/file{i}.py": f"value_{i} = {i}\n" for i in range(3000)}
+        files["pkg/last.py"] = f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'
+        commit(repo, files)
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertLess(run.seconds, 15, f"took {run.seconds:.1f}s")
+
 
 class WhichRefsArePushed(HookCase):
     def test_named_branch_other_than_head_is_scanned(self):
