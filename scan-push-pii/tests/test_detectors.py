@@ -140,3 +140,39 @@ class LineShapes(unittest.TestCase):
     def test_two_detectors_on_one_line_both_reported(self):
         line = assign("DB", url("admin", "Qx7Lm2Vb9Tz4", "db.internal", path="/app")) + f"  # ask {GMAIL}"
         self.assertEqual(names(line, "notes.md"), ["email", "url-with-credentials"])
+
+
+class CommonSecretShapes(unittest.TestCase):
+    """Reviewer item 12: the .env / config.json shapes."""
+    def test_prefixed_env_names(self):
+        for line in (assign("DB_PASSWORD", RANDOM), assign("OPENAI_API_KEY", RANDOM_LONG, quote="", sep="="),
+                     assign("AWS_SECRET_ACCESS_KEY", AWS_SECRET, sep="="), assign("STRIPE_SECRET_KEY", RANDOM),
+                     assign("JWT_SECRET", RANDOM + "9f8e7d", quote="", sep="=")):
+            self.assertIn("secret-assignment", names(line), line)
+
+    def test_json_quoted_keys(self):
+        self.assertIn("secret-assignment", names(assign("password", RANDOM, sep=": ", key_quote='"'), "config.json"))
+        self.assertIn("secret-assignment", names(assign("api_key", RANDOM, quote="'", sep=": ", key_quote="'")))
+
+    def test_plain_word_value_in_a_dotenv_file_counts(self):
+        plain = assign("DB_PASSWORD", "supersecretpassword", quote="", sep="=")
+        self.assertIn("secret-assignment", names(plain, ".env"))
+        self.assertIn("secret-assignment", names(plain, "deploy/.env.production"))
+
+    def test_plain_word_value_in_code_does_not(self):
+        self.assertEqual(names(assign("DB_PASSWORD", "supersecretpassword", quote="", sep="="), "settings.py"), [])
+
+    def test_bearer_token(self):
+        self.assertIn("bearer-token", names(bearer(RANDOM + ".9f8e7d6c5b4a3f2e1d")))
+        self.assertEqual(names(bearer("<token>")), [])
+
+    def test_token_url_is_not_a_secret(self):
+        self.assertEqual(names('token_url = "https://auth.example.com/oauth/token"'), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+# made-up names for the tests; real names live only in the private ~/.claude/hooks/pii-own-names file
+FAKE_OWN_NAMES = [("zandrika(vell)?", 0.90), ("vellanquist", 0.70)]
