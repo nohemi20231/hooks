@@ -135,6 +135,18 @@ class SecretsInTheTree(HookCase):
         self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
 
 
+class WhichRefsArePushed(HookCase):
+    def test_named_branch_other_than_head_is_scanned(self):
+        repo = make_repo(self.root)
+        git(repo, "checkout", "-qb", "leak")
+        commit(repo, {"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
+        git(repo, "checkout", "-q", "main")
+        self.assertTrue(self.run_hook("git push origin leak", repo).denied)
+        self.assertTrue(self.run_hook("git push --all", repo).denied)
+        self.assertTrue(self.run_hook("git push origin leak:refs/heads/x", repo).denied)
+        self.assertTrue(self.run_hook("git push", repo).allowed)
+
+
 class PersonalData(HookCase):
     def test_allowlist_hides_an_ask_tier_item(self):
         repo = make_repo(self.root)
