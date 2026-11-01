@@ -213,6 +213,10 @@ class OwnNames(unittest.TestCase):
     def test_handle_in_a_path_string(self):
         self.assertEqual(names('base = "/Users/zandrikavell/workspace"', "settings.py"), ["own-name"])
 
+    def test_surname_alone_takes_the_confidence_of_its_line(self):
+        h = hits("reviewed by Vellanquist")
+        self.assertEqual([(x.detector, x.confidence) for x in h], [("own-name", 0.70)])
+
     def test_match_is_case_insensitive(self):
         self.assertEqual(names("ZANDRIKA"), ["own-name"])
 

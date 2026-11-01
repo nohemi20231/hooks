@@ -435,6 +435,13 @@ class OwnNamesEndToEnd(HookCase):
         run = self.run_hook("git push", repo)
         self.assertIn("own-name", run.reason.split("redact WITHOUT asking")[1])
 
+    def test_surname_alone_is_ask_tier(self):
+        self._names("zandrika(vell)?\nvellanquist 0.70\n")
+        repo = make_repo(self.root)
+        commit(repo, {"README.md": "reviewed by Vellanquist\n"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("own-name", run.reason.split("ASK THE USER")[1])
+
     def test_own_name_in_a_path_is_masked_in_line_findings(self):
         self._names("zandrika\n")
         repo = make_repo(self.root)
