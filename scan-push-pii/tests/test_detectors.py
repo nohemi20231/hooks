@@ -176,3 +176,23 @@ if __name__ == "__main__":
 
 # made-up names for the tests; real names live only in the private ~/.claude/hooks/pii-own-names file
 FAKE_OWN_NAMES = [("zandrika(vell)?", 0.90), ("vellanquist", 0.70)]
+
+
+class FirstPerson(unittest.TestCase):
+    """D7: prose about the owner. Code and short fragments are not prose."""
+    def test_first_person_prose_in_markdown(self):
+        h = hits("Today I felt that my session went badly and I am tired.", "journal.md")
+        self.assertEqual([x.detector for x in h], ["first-person"])
+        self.assertEqual(h[0].confidence, 0.65)
+
+    def test_first_person_in_code_file_is_ignored(self):
+        self.assertEqual(names("# I think this loop is slow and my fix is below", "app.py"), [])
+
+    def test_short_fragment_is_not_prose(self):
+        self.assertEqual(names("me", "notes.md"), [])
+
+    def test_code_like_line_in_markdown_is_ignored(self):
+        self.assertEqual(names("const me = users.find(u => u.id === myId);", "README.md"), [])
+
+    def test_first_person_is_reported_once_per_line(self):
+        self.assertEqual(names("I think I should say that I am fine and my day was good.", "notes.md"), ["first-person"])

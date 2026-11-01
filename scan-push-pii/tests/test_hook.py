@@ -420,3 +420,12 @@ class LoggingNeverChangesTheDecision(HookCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProtectedFiles(HookCase):
+    """D8: protected paths and transcript content block like secrets; first-person prose asks."""
+    def test_first_person_prose_is_ask_tier(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": "Today I felt that my session went badly and I am tired.\n"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("first-person", run.reason.split("ASK THE USER")[1])
