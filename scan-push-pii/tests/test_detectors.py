@@ -36,6 +36,9 @@ class VendorKeys(unittest.TestCase):
     def test_key_with_example_inside_is_a_placeholder(self):
         self.assertEqual(names('sk-ant-api03-EXAMPLEEXAMPLEEXAMPLEEXAMPLE'), [])
 
+    def test_encrypted_private_key_block(self):
+        self.assertEqual(names(ENCRYPTED_KEY_HEADER), ["private-key"])
+
     def test_rsa_private_key_block(self):
         self.assertEqual(names(PRIVATE_KEY_HEADER), ["private-key"])
 

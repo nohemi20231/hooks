@@ -146,6 +146,31 @@ class SecretsInTheTree(HookCase):
         commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
         self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
 
+    def test_secret_in_minified_bundle_and_svg_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"dist/bundle.min.js": f'var k="{FAKE_AWS_KEY}";', "logo.svg": f"<svg><!-- {FAKE_AWS_KEY} --></svg>"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("dist/bundle.min.js", run.reason)
+        self.assertIn("logo.svg", run.reason)
+
+    def test_secret_in_a_filename_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {f"keys/{FAKE_ANTHROPIC_KEY}.txt": "x\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("anthropic-key", run.reason)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
+
+    def test_secret_in_utf16_file_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"utf16.env": f"KEY={FAKE_ANTHROPIC_KEY}\n".encode("utf-16")})
+        self.assertIn("utf16.env", self.run_hook("git push", repo).reason)
+
+    def test_secret_after_a_very_long_line_prefix_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"padded.txt": "x" * 5000 + " " + FAKE_AWS_KEY + "\n"})
+        self.assertIn("padded.txt", self.run_hook("git push", repo).reason)
+
     def test_django_model_is_not_a_secret(self):
         repo = make_repo(self.root)
         commit(repo, {"models.py": "password = models.CharField(max_length=128)\napi_key: Optional[str] = None\n"})
