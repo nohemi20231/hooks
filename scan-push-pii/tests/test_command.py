@@ -191,6 +191,13 @@ class MultiLineAndKeywords(unittest.TestCase):
     def test_negated(self):
         self.assertEqual(len(find_pushes("! git push", CWD)), 1)
 
+    def test_hash_inside_a_word_is_not_a_comment(self):
+        self.assertEqual(len(find_pushes("echo done#1 && git push", CWD)), 1)
+
+    def test_hash_at_word_start_is_a_comment_to_end_of_line(self):
+        self.assertEqual(find_pushes("echo x # git push", CWD), [])
+        self.assertEqual(len(find_pushes("echo x # note\ngit push", CWD)), 1)
+
 
 class Wrappers(unittest.TestCase):
     """Reviewer item 3 and 5: programs that run another program."""
