@@ -18,7 +18,9 @@ from .findings import Hit, Tier
 Scorer = Callable[[re.Match, str, str, float], Optional[float]]   # (match, line, path, base) -> confidence or None
 
 PLACEHOLDER = re.compile(
-    r"example|changeme|change_me|placeholder|your[_-]?|xxx|dummy|sample|fake|redacted|<[^>]+>|\$\{|\{\{|\*{3,}|\.\.\.",
+    r"example|changeme|change_me|placeholder|your[_-]?|xxx|dummy|sample|fake|redacted|<[^>]+>|\$\{|\{\{|\*{3,}|\.\.\."
+    r"|^(?:test|local)[-_]"     # test fixtures: a value that starts test- or local-
+    r"|0{16,}",                 # all-zero ids in example env files: AC000...000
     re.I,
 )
 LOCALHOST = re.compile(r"^(localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal)$", re.I)
@@ -256,6 +258,7 @@ SECRET_DETECTORS = [
     _d("stripe-key", Tier.SECRET, r"\b[sr]k_(?:live|test)_[A-Za-z0-9]{20,}", 0.95, score_vendor_key),
     _d("twilio-sid", Tier.SECRET, r"\b(?:AC|SK)[0-9a-f]{32}\b", 0.85, score_vendor_key),
     _d("google-api-key", Tier.SECRET, r"\bAIza[0-9A-Za-z_-]{35}\b", 0.90, score_vendor_key),
+    _d("google-ai-studio-key", Tier.SECRET, r"\bAQ\.[A-Za-z0-9_-]{30,}", 0.90, score_vendor_key),   # newer AI Studio keys
     _d("sendgrid-key", Tier.SECRET, r"\bSG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}\b", 0.95, score_vendor_key),
     _d("jwt", Tier.SECRET, r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", 0.85, score_jwt),
     _d("url-with-credentials", Tier.SECRET,
