@@ -68,6 +68,61 @@ class GlobalOptions(unittest.TestCase):
         self.assertEqual(one("env FOO=1 git push").cwd, "/repo")
 
 
+class WorkingDirectoryChain(unittest.TestCase):
+    def test_cd_then_push(self):
+        self.assertEqual(one("cd r1 && git push").cwd, "/repo/r1")
+
+    def test_two_cds(self):
+        self.assertEqual(one("cd /a && cd b && git push", cwd="/").cwd, "/a/b")
+
+    def test_cd_after_push_does_not_matter(self):
+        self.assertEqual(one("git push && cd ..").cwd, "/repo")
+
+    def test_semicolon_separator(self):
+        self.assertEqual(one("cd r1; git push").cwd, "/repo/r1")
+
+    def test_subshell(self):
+        self.assertEqual(one("(cd r1 && git push)").cwd, "/repo/r1")
+
+    def test_pushd(self):
+        self.assertEqual(one("pushd r1 && git push").cwd, "/repo/r1")
+
+    def test_cd_with_quotes_and_spaces(self):
+        self.assertEqual(one('cd "/path/r1 copy" && git push').cwd, "/path/r1 copy")
+
+    def test_cd_with_single_quotes(self):
+        self.assertEqual(one("cd '/path/r1 copy' && git push").cwd, "/path/r1 copy")
+
+    def test_cd_home_variable(self):
+        home = os.path.expanduser("~")
+        self.assertEqual(one('cd "$HOME/x" && git push').cwd, f"{home}/x")
+
+    def test_cd_tilde(self):
+        home = os.path.expanduser("~")
+        self.assertEqual(one("cd ~/x && git push").cwd, f"{home}/x")
+
+    def test_cd_dollar_pwd(self):
+        self.assertEqual(one("cd $PWD/r1 && git push").cwd, "/repo/r1")
+
+    def test_cd_with_no_argument_goes_home(self):
+        self.assertEqual(one("cd && git push").cwd, os.path.expanduser("~"))
+
+    def test_sh_dash_c(self):
+        self.assertEqual(one("sh -c 'cd r1 && git push'").cwd, "/repo/r1")
+
+    def test_bash_dash_c(self):
+        self.assertEqual(one('bash -c "git push origin main"').args, ["origin", "main"])
+
+    def test_pipe_separator(self):
+        self.assertEqual(one("git push 2>&1 | tee log").args, [])
+
+
+class SeveralPushes(unittest.TestCase):
+    def test_two_pushes_in_one_command(self):
+        pushes = find_pushes("git push origin a && cd ../other && git push", CWD)
+        self.assertEqual([(p.cwd, p.args) for p in pushes], [("/repo", ["origin", "a"]), ("/other", [])])
+
+
 class GhCli(unittest.TestCase):
     def test_gh_repo_sync_is_a_push(self):
         push = one("gh repo sync")

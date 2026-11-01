@@ -146,10 +146,26 @@ class WhichRefsArePushed(HookCase):
         self.assertTrue(self.run_hook("git push origin leak:refs/heads/x", repo).denied)
         self.assertTrue(self.run_hook("git push", repo).allowed)
 
+    def test_push_to_a_second_remote_scans_against_that_remote(self):
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"contact {GMAIL}\n"})
+        git(repo, "push", "-q", "origin", "main")        # already on origin
+        other = os.path.join(self.root, "other.git")
+        git(self.root, "init", "-q", "--bare", "-b", "main", other)
+        git(repo, "remote", "add", "other", other)
+        run = self.run_hook("git push other main", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("email", run.reason)
+
     def test_dash_C_absolute_path_is_scanned(self):
         repo = make_repo(self.root)
         commit(repo, {"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
         self.assertTrue(self.run_hook(f"git -C {repo} push", self.root).denied)
+
+    def test_subshell_cd_is_scanned(self):
+        repo = make_repo(self.root)
+        commit(repo, {"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
+        self.assertTrue(self.run_hook("(cd r1 && git push)", self.root).denied)
 
     def test_push_alias_is_resolved_from_git_config(self):
         repo = make_repo(self.root)
