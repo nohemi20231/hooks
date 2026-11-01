@@ -474,6 +474,13 @@ class ProtectedFiles(HookCase):
         self.assertTrue(run.denied)
         self.assertIn("protected-path", run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0])
 
+    def test_transcript_content_in_a_json_file_is_blocked(self):
+        repo = make_repo(self.root)
+        commit(repo, {"data/export.json": '{"role": "user", "content": "hi"}\n{"role": "assistant", "content": "hello"}\n'})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("transcript-content", run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0])
+
     def test_first_person_inside_journal_is_blocked(self):
         repo = make_repo(self.root)
         commit(repo, {"journal/day.md": "I am not sure I can do this again today.\n"})

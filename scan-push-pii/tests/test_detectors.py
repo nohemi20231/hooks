@@ -291,3 +291,22 @@ class Paths(unittest.TestCase):
     def test_first_person_inside_protected_path_is_blocked(self):
         h = hits("I am not sure I can do this again.", "journal/2026.md")
         self.assertEqual(h[0].tier, Tier.SECRET)
+
+
+class ProtectedPathsAreNarrow(unittest.TestCase):
+    """Reviewer item 20: module names that happen to contain a protected word are code, not transcripts."""
+    def test_source_modules_are_not_protected(self):
+        for path in ("src/memory.rs", "app/transcripts/service.py", "app/conversation.py", "lib/journal.go",
+                     "personal_best.py", "diary_app/views.py", "chat_history.sql", "docs/memory-model.md"):
+            self.assertFalse(is_protected_path(path), path)
+            self.assertEqual([h.detector for h in scan_path(path)], [], path)
+
+    def test_prose_files_in_protected_folders_are_protected(self):
+        for path in ("transcripts/2026-10-31.md", "journal/today.txt", "notes/personal/me.md", "conversations/export.json",
+                     ".claude/projects/x/abc.jsonl", "memory/MEMORY.md"):
+            self.assertEqual([h.detector for h in scan_path(path)], ["protected-path"], path)
+
+    def test_json_is_a_transcript_only_by_content(self):
+        self.assertTrue(looks_like_transcript('{"role": "user", "content": "hi"}\n{"role": "assistant", "content": "hello"}\n'))
+        self.assertTrue(looks_like_transcript('{"parentUuid": null, "sessionId": "abc", "type": "user"}\n'))
+        self.assertFalse(looks_like_transcript('{"id": 1, "label": "cat"}\n{"id": 2, "label": "dog"}\n'))
