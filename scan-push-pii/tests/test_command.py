@@ -229,6 +229,10 @@ class Wrappers(unittest.TestCase):
     def test_export_git_dir_persists_across_segments(self):
         self.assertEqual(one("export GIT_DIR=/r1/.git; git push").cwd, "/r1")
 
+    def test_variable_program_with_push_word_is_a_candidate(self):
+        push = one("g=git; $g push")
+        self.assertFalse(push.certain)
+
 
 class OtherPushShapes(unittest.TestCase):
     """Reviewer items 6 and 7: aliases given on the command line, send-pack, submodule foreach, gh flags."""
@@ -240,3 +244,12 @@ class OtherPushShapes(unittest.TestCase):
     def test_inline_alias_via_git_config_parameters(self):
         push = one("GIT_CONFIG_PARAMETERS=\"'alias.x=push'\" git x")
         self.assertTrue(push.certain)
+
+    def test_send_pack_is_a_push(self):
+        self.assertTrue(one("git send-pack origin main").certain)
+
+    def test_submodule_foreach_git_push(self):
+        self.assertEqual(len(find_pushes("git submodule foreach git push", CWD)), 1)
+
+    def test_gh_repo_flag_before_subcommand(self):
+        self.assertEqual(one("gh --repo x/y repo sync").tool, "gh")
