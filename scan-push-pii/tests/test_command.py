@@ -253,3 +253,10 @@ class OtherPushShapes(unittest.TestCase):
 
     def test_gh_repo_flag_before_subcommand(self):
         self.assertEqual(one("gh --repo x/y repo sync").tool, "gh")
+
+    def test_git_dir_itself_as_cwd(self):
+        self.assertEqual(one("cd .git && git push").cwd, "/repo/.git")
+
+
+if __name__ == "__main__":
+    unittest.main()
