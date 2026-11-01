@@ -9,8 +9,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pushscan import policy  # noqa: E402
 from pushscan.detectors import is_protected_path, looks_like_transcript, scan_path, scan_text, set_own_names, Tier  # noqa: E402
 from fixtures import (ANTHROPIC_KEY, AWS_KEY, AWS_SECRET, CARD, E164_PHONE, ENCRYPTED_KEY_HEADER, GMAIL,  # noqa: E402
-                      JWT_IO_SAMPLE, JWT_OTHER, PRIVATE_KEY_HEADER, PUBLIC_IP, RANDOM, RANDOM_LONG, SSN, US_PHONE,
-                      US_PHONE_DASHED, WORK_EMAIL, assign, bearer, url)
+                      GOOGLE_AI_KEY, JWT_IO_SAMPLE, JWT_OTHER, PRIVATE_KEY_HEADER, PUBLIC_IP, RANDOM, RANDOM_LONG, SSN,
+                      TWILIO_SID, US_PHONE, US_PHONE_DASHED, WORK_EMAIL, ZERO_TWILIO_SID, assign, bearer, url)
 
 
 def hits(text, path="app.py"):
@@ -35,6 +35,18 @@ class VendorKeys(unittest.TestCase):
 
     def test_key_with_example_inside_is_a_placeholder(self):
         self.assertEqual(names('sk-ant-api03-EXAMPLEEXAMPLEEXAMPLEEXAMPLE'), [])
+
+    def test_twilio_sid_is_a_secret(self):
+        self.assertEqual(names(assign("TWILIO_ACCOUNT_SID", TWILIO_SID, quote="", sep="=")), ["twilio-sid"])
+
+    def test_all_zero_twilio_sid_is_a_placeholder(self):
+        self.assertEqual(names(assign("export TWILIO_ACCOUNT_SID", ZERO_TWILIO_SID, quote="", sep="="), "local.env.example"), [])
+
+    def test_google_ai_studio_key_is_a_secret(self):
+        self.assertEqual(names(assign("GOOGLE_API_KEY", GOOGLE_AI_KEY)), ["google-ai-studio-key"])
+
+    def test_encrypted_private_key_block(self):
+        self.assertEqual(names(ENCRYPTED_KEY_HEADER), ["private-key"])
 
     def test_rsa_private_key_block(self):
         self.assertEqual(names(PRIVATE_KEY_HEADER), ["private-key"])
@@ -79,6 +91,12 @@ class SecretAssignments(unittest.TestCase):
     def test_env_lookup_is_not_a_secret(self):
         self.assertEqual(names('password = os.environ["DB_PASSWORD"]'), [])
 
+    def test_test_prefixed_literal_is_a_placeholder(self):
+        self.assertEqual(names(assign("static final String TOKEN", "test-auth-token-primary"), "ScenarioIT.java"), [])
+
+    def test_local_prefixed_literal_is_a_placeholder(self):
+        self.assertEqual(names(assign("DB_PASSWORD", "local_dev_password", quote="", sep="="), ".env"), [])
+
     def test_changeme_is_a_placeholder(self):
         self.assertEqual(names('password = "changeme"'), [])
 
@@ -113,17 +131,41 @@ class PersonalData(unittest.TestCase):
     def test_work_email_scores_below_threshold(self):
         self.assertEqual(hits(f"mail {WORK_EMAIL}", "notes.md")[0].confidence, 0.75)
 
+    def test_placeholder_email_is_ignored(self):
+        self.assertEqual(names("your-email@gmail.com", "notes.md"), [])
+
+    def test_example_domain_email_is_ignored(self):
+        self.assertEqual(names("help@example.com", "notes.md"), [])
+
     def test_e164_phone(self):
         self.assertEqual(hits(E164_PHONE, "notes.md")[0].confidence, 0.85)
 
     def test_us_phone_scores_low(self):
         self.assertEqual(hits(US_PHONE, "notes.md")[0].confidence, 0.60)
 
+    def test_555_01xx_fictional_phone_is_ignored(self):
+        self.assertEqual(names("call 214-555-0100", "notes.md"), [])
+
+    def test_phone_after_support_label_is_found(self):
+        self.assertEqual(names(f"support: {US_PHONE_DASHED}", "notes.md"), ["phone-us"])
+
+    def test_semver_is_not_a_phone(self):
+        self.assertEqual(names("version 214.867.5309", "notes.md"), [])
+
     def test_valid_ssn(self):
         self.assertEqual(names(f"ssn {SSN}", "notes.md"), ["ssn"])
 
+    def test_all_zero_ssn_is_ignored(self):
+        self.assertEqual(names("000-00-0000", "notes.md"), [])
+
     def test_luhn_valid_card(self):
         self.assertEqual(names(CARD, "notes.md"), ["card-number"])
+
+    def test_repeated_digit_card_is_ignored(self):
+        self.assertEqual(names("4111111111111111", "notes.md"), [])
+
+    def test_timestamp_is_not_a_card(self):
+        self.assertEqual(names("1730400000000", "notes.md"), [])
 
     def test_public_ip_only_when_the_line_calls_it_a_host(self):
         self.assertEqual(names(f"host = {PUBLIC_IP}", "notes.md"), ["public-ipv4"])

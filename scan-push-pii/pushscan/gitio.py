@@ -122,11 +122,13 @@ class Repo:
         if not refs and not flags & {"--all", "--branches", "--mirror", "--tags"}:
             current = self.current_branch()
             refs = [f"refs/heads/{current}"] if current else ["HEAD"]
-        refs = list(dict.fromkeys(r for r in refs if r))
+        # a branch created earlier in the same command does not exist yet when the hook runs: scan HEAD
+        refs = [r if self.try_git("rev-parse", "--verify", "-q", f"{r}^{{commit}}") is not None else "HEAD" for r in refs if r]
+        refs = list(dict.fromkeys(refs))
         if remote is None:
             first = refs[0].replace("refs/heads/", "", 1) if refs else "HEAD"
             remote = self.push_remote_for(first)
-        return [PushRange(ref, self._base_for(ref, remote)) for ref in refs]
+        return [PushRange(ref, self.base_for(ref, remote)) for ref in refs]
 
     @staticmethod
     def _parse_push_args(args: list[str]) -> tuple[str | None, list[str], set[str]]:
@@ -156,7 +158,7 @@ class Repo:
             return self.refs(src.split("*", 1)[0])
         return [src]
 
-    def _base_for(self, ref: str, remote: str) -> str:
+    def base_for(self, ref: str, remote: str) -> str:
         """The newest commit of `ref` that `remote` already has, or the empty tree if none.
 
         Same-named remote branch first. A new branch or a tag is compared with whatever the

@@ -15,13 +15,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fixtures import ANTHROPIC_KEY as FAKE_ANTHROPIC_KEY, AWS_KEY as FAKE_AWS_KEY, GMAIL, US_PHONE  # noqa: E402
 
 
+
 def read_bytes(path):
     with open(path, "rb") as f:
         return f.read()
 
+NO_HOOKS = tempfile.mkdtemp(prefix="pushscan-nohooks-")   # an empty hooks dir: a globally installed pre-push hook must not run here
+
 
 def git(repo, *args, **kw):
-    return subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, capture_output=True, text=True, check=True, **kw).stdout
+    return subprocess.run(["git", "-c", "commit.gpgsign=false", "-c", f"core.hooksPath={NO_HOOKS}", *args],
+                          cwd=repo, capture_output=True, text=True, check=True, **kw).stdout
 
 
 def make_repo(root, name="r1", files=None, remote=True):
@@ -58,9 +62,9 @@ def commit(repo, files, message="change"):
 
 
 class HookRun:
-    def __init__(self, state_dir, command, cwd, tool_input=None):
+    def __init__(self, state_dir, command, cwd, tool_input=None, env=None):
         payload = {"tool_name": "Bash", "tool_input": tool_input if tool_input is not None else {"command": command}, "cwd": cwd}
-        env = dict(os.environ, PUSHSCAN_STATE_DIR=state_dir)
+        env = dict(os.environ, PUSHSCAN_STATE_DIR=state_dir, **(env or {}))
         started = time.time()
         proc = subprocess.run([sys.executable, "-I", HOOK], input=json.dumps(payload), capture_output=True, text=True, env=env)
         self.seconds = time.time() - started
@@ -117,6 +121,11 @@ class CleanAndNonPush(HookCase):
         self.assertNotIn("Traceback", run.stdout + run.stderr)
         self.assertIn("payload", run.reason)
 
+    def test_empty_bare_repo_cwd_is_allowed(self):
+        bare = os.path.join(self.root, "bare.git")
+        git(self.root, "init", "-q", "--bare", bare)
+        self.assertTrue(self.run_hook("git push", bare).allowed)
+
 
 class SecretsInTheTree(HookCase):
     def test_secret_at_head_blocks(self):
@@ -145,6 +154,31 @@ class SecretsInTheTree(HookCase):
         repo = make_repo(self.root)
         commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
         self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
+
+    def test_secret_in_minified_bundle_and_svg_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"dist/bundle.min.js": f'var k="{FAKE_AWS_KEY}";', "logo.svg": f"<svg><!-- {FAKE_AWS_KEY} --></svg>"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("dist/bundle.min.js", run.reason)
+        self.assertIn("logo.svg", run.reason)
+
+    def test_secret_in_a_filename_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {f"keys/{FAKE_ANTHROPIC_KEY}.txt": "x\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("anthropic-key", run.reason)
+        self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
+
+    def test_secret_in_utf16_file_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"utf16.env": f"KEY={FAKE_ANTHROPIC_KEY}\n".encode("utf-16")})
+        self.assertIn("utf16.env", self.run_hook("git push", repo).reason)
+
+    def test_secret_after_a_very_long_line_prefix_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"padded.txt": "x" * 5000 + " " + FAKE_AWS_KEY + "\n"})
+        self.assertIn("padded.txt", self.run_hook("git push", repo).reason)
 
     def test_django_model_is_not_a_secret(self):
         repo = make_repo(self.root)
@@ -176,6 +210,14 @@ class WhichRefsArePushed(HookCase):
         commit(repo, {"a.py": "x = 1\n"})
         run = self.run_hook("git push -u origin feature", repo)
         self.assertTrue(run.allowed, run.stdout)
+
+    def test_branch_created_in_the_same_command_scans_head(self):
+        repo = make_repo(self.root)
+        commit(repo, {"a.py": "x = 1\n"})
+        run = self.run_hook("git checkout -b feature && git push -u origin feature", repo)
+        self.assertTrue(run.allowed, run.stdout)
+        commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
+        self.assertTrue(self.run_hook("git checkout -b leak && git push -u origin leak", repo).denied)
 
     def test_named_branch_other_than_head_is_scanned(self):
         repo = make_repo(self.root)
@@ -287,6 +329,14 @@ class PersonalData(HookCase):
 
 
 class StateFiles(HookCase):
+    def test_empty_salt_file_is_regenerated(self):
+        salt_path = os.path.join(self.state, ".pii-salt")
+        open(salt_path, "wb").close()
+        repo = make_repo(self.root)
+        commit(repo, {"notes.md": f"office {US_PHONE}\n"})
+        self.run_hook("git push", repo)
+        self.assertEqual(len(read_bytes(salt_path)), 32)
+
     def test_every_decision_is_logged_locally_masked(self):
         repo = make_repo(self.root)
         commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
@@ -313,6 +363,26 @@ class NothingRawLeavesTheScan(HookCase):
         self.assertTrue(run.denied)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
+
+    def test_state_paths_are_shown_relative_to_home(self):
+        # the home directory spells the user name; the allowlist path in an ASK report must not
+        home = os.path.join(self.root, "home-zandrikavell")
+        state = os.path.join(home, ".claude", "hooks")
+        os.makedirs(state)
+        repo = make_repo(self.root)
+        commit(repo, {"contact.md": f"office {US_PHONE}\n"})
+        run = HookRun(state, "git push", repo, env={"HOME": home})
+        self.assertTrue(run.denied, run.stdout)
+        self.assertIn("~/.claude/hooks/pii-allowlist", run.reason)
+        self.assertNotIn("zandrikavell", run.reason)
+
+    def test_home_directory_in_error_text_is_shortened(self):
+        home = os.path.join(self.root, "home-zandrikavell")
+        os.makedirs(os.path.join(home, ".claude", "hooks"))
+        run = HookRun(os.path.join(home, ".claude", "hooks"), f"cd {home}/missing && git push", self.root, env={"HOME": home})
+        self.assertTrue(run.denied)
+        self.assertNotIn("zandrikavell", run.reason)
+        self.assertIn("~/missing", run.reason)
 
     def test_error_text_is_masked(self):
         run = self.run_hook(f"cd /tmp/{FAKE_ANTHROPIC_KEY} && git push", self.root)

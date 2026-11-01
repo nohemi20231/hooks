@@ -1,0 +1,17 @@
+#!/usr/bin/env -S python3 -I
+"""git pre-push hook: scan what a terminal push would send; see ../pushscan/prepush.py.
+
+Install for every repository:  git config --global core.hooksPath "$(pwd)/git-hooks"
+(or run ../install.sh). A repository that sets its own core.hooksPath (husky, lefthook) does
+not run this; copy or symlink this file into that folder.
+"""
+import os
+import sys
+
+# `python3 -I` keeps the script directory off sys.path on purpose; add the folder above git-hooks/ back.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
+from pushscan.prepush import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv, sys.stdin))

@@ -6,6 +6,7 @@ One folder per hook. Each hook works with Claude Code and GitHub Copilot where p
 | Hook | Event | What it does |
 |---|---|---|
 | `agent-complete-sound/` | Stop / agentStop, Notification | Chimes when the agent finishes or is waiting on you (Claude Code). If you've been idle 60s+, speaks which agent and on what. macOS only. |
+| `scan-push-pii/` | PreToolUse (Bash) in Claude Code; git `pre-push` in a terminal | Scans what a push would send. Secrets and protected files block with no bypass; personal data is confidence-scored (≥ 0.80 Claude redacts, below it asks you). Python 3, no dependencies. |
 
 ## `agent-complete-sound`
 
@@ -65,6 +66,21 @@ echo '{"sessionId":"x","cwd":"'"$PWD"'","reason":"complete"}' \
 
 Credit: adapted from Pamela Fox's [agent completion hook](https://gist.github.com/pamelafox/c9cb3e000fdf127741b121d7c5abbf02), shown in
 [Parallelize development with GitHub Copilot](https://pamelafox.github.io/parallelize-development-github-copilot/#/24).
+
+## `scan-push-pii`
+
+Before a push reaches GitHub, the whole pushed tree and every outgoing commit are scanned for
+secrets (API keys, private keys, credential URLs, bearer tokens, secret assignments) and for
+protected files (transcripts, journals, memory, personal notes); any hit blocks the push, no
+threshold, no allowlist. Lines the push adds are scanned for personal data (emails, phones, SSNs,
+cards, your own names from a private file, first-person prose): at or above 0.80 confidence
+Claude redacts, below it Claude asks you per item. Nothing raw is printed or logged.
+
+```bash
+sh scan-push-pii/install.sh
+```
+
+Details, the detector table and the private files it reads: [`scan-push-pii/README.md`](scan-push-pii/README.md).
 
 ## License
 

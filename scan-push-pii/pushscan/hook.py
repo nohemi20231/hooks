@@ -14,7 +14,7 @@ from . import policy
 from .command import Push, find_pushes
 from .detectors import set_own_names
 from .findings import Finding
-from .gitio import GitError, Repo
+from .gitio import GitError, PushRange, Repo
 from .policy import Action, Report, action_for, can_be_allowlisted
 from .scan import Scanner, masked_text
 
@@ -23,7 +23,7 @@ def main() -> int:
     try:
         return _main()
     except Exception as error:                       # last resort: still a deny, still JSON
-        _emit_deny(policy.FAILURE_REASON.format(error=masked_text(_describe(error))), "scan-push-pii: scan failed, push refused")
+        _emit_deny(policy.FAILURE_REASON.format(error=masked_text(describe_error(error))), "scan-push-pii: scan failed, push refused")
         return 0
 
 
@@ -41,7 +41,7 @@ def _main() -> int:
         set_own_names(policy.load_own_names())      # D7: the owner's names, from the private file
         report = scan_pushes(pushes)
     except Exception as error:                      # fail closed, but with a reason instead of a traceback
-        reason = masked_text(_describe(error))
+        reason = masked_text(describe_error(error))
         _emit_deny(policy.FAILURE_REASON.format(error=reason), "scan-push-pii: scan failed, push refused")
         _log("deny(error)", command, reason)
         return 0
@@ -53,37 +53,50 @@ def _main() -> int:
     return 0
 
 
+class Collector:
+    """Findings from one or more repositories, bucketed by action; both entry points use it."""
+
+    def __init__(self):
+        self.salt = policy.load_salt()
+        self.allowlist = policy.load_allowlist()
+        self.blocked: list[Finding] = []
+        self.auto: list[Finding] = []
+        self.ask: list[Finding] = []
+        self.ranges: list[str] = []
+        self._seen: set[tuple] = set()
+
+    def scan(self, repo: Repo, ranges: list[PushRange]) -> None:
+        scanner = Scanner(repo, self.salt)
+        bucket_for = {Action.BLOCK: self.blocked, Action.AUTO_REDACT: self.auto, Action.ASK: self.ask}
+        for rng in ranges:
+            self.ranges.append(rng.spec)
+            findings = (scanner.secrets_in_tree(rng.ref)
+                        + scanner.secrets_in_outgoing_commits(rng)
+                        + scanner.personal_in_outgoing_diff(rng))
+            for finding in findings:
+                key = (finding.path, finding.line, finding.detector, finding.masked_value)
+                if key in self._seen:
+                    continue
+                self._seen.add(key)
+                if can_be_allowlisted(finding) and finding.fingerprint in self.allowlist:
+                    continue
+                bucket_for[action_for(finding)].append(finding)
+
+    def report(self) -> Report:
+        order = lambda f: (-f.confidence, f.path, f.line)
+        return Report(sorted(self.blocked, key=order), sorted(self.auto, key=order), sorted(self.ask, key=order), self.ranges)
+
+
 def scan_pushes(pushes: list[Push]) -> Report:
-    salt = policy.load_salt()
-    allowlist = policy.load_allowlist()
-    blocked: list[Finding] = []
-    auto: list[Finding] = []
-    ask: list[Finding] = []
-    bucket_for = {Action.BLOCK: blocked, Action.AUTO_REDACT: auto, Action.ASK: ask}
-    ranges: list[str] = []
-    seen: set[tuple] = set()
+    collector = Collector()
     for push in pushes:
         repo = Repo.open(push.cwd)
         if repo is None:
             continue                                     # not a repository: nothing can be pushed
         if not push.certain and not _alias_is_push(repo, push.subcommand):
             continue
-        scanner = Scanner(repo, salt)
-        for rng in repo.push_ranges(push.args):
-            ranges.append(rng.spec)
-            findings = (scanner.secrets_in_tree(rng.ref)
-                        + scanner.secrets_in_outgoing_commits(rng)
-                        + scanner.personal_in_outgoing_diff(rng))
-            for finding in findings:
-                key = (finding.path, finding.line, finding.detector, finding.masked_value)
-                if key in seen:
-                    continue
-                seen.add(key)
-                if can_be_allowlisted(finding) and finding.fingerprint in allowlist:
-                    continue
-                bucket_for[action_for(finding)].append(finding)
-    order = lambda f: (-f.confidence, f.path, f.line)
-    return Report(sorted(blocked, key=order), sorted(auto, key=order), sorted(ask, key=order), ranges)
+        collector.scan(repo, repo.push_ranges(push.args))
+    return collector.report()
 
 
 def _alias_is_push(repo: Repo, name: str, depth: int = 0) -> bool:
@@ -127,7 +140,7 @@ def _emit_deny(reason: str, summary: str) -> None:
     }))
 
 
-def _describe(error: Exception) -> str:
+def describe_error(error: Exception) -> str:
     text = str(error) or error.__class__.__name__
     return text if isinstance(error, GitError) else f"{error.__class__.__name__}: {text}"
 
