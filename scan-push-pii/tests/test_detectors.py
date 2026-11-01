@@ -30,16 +30,77 @@ class VendorKeys(unittest.TestCase):
     def test_aws_key_is_a_secret(self):
         self.assertEqual(names(AWS_KEY), ["aws-access-key"])
 
+    def test_key_made_of_the_word_fake_is_a_placeholder(self):
+        self.assertEqual(names("AKIAFAKEFAKEFAKEFAKE is an example key"), [])
+
+    def test_key_with_example_inside_is_a_placeholder(self):
+        self.assertEqual(names('sk-ant-api03-EXAMPLEEXAMPLEEXAMPLEEXAMPLE'), [])
+
     def test_rsa_private_key_block(self):
         self.assertEqual(names(PRIVATE_KEY_HEADER), ["private-key"])
+
+    def test_jwt_io_sample_token_is_a_placeholder(self):
+        self.assertEqual(names(JWT_IO_SAMPLE), [])
 
     def test_other_jwt_is_a_secret(self):
         self.assertEqual(names(JWT_OTHER), ["jwt"])
 
 
+class SecretAssignments(unittest.TestCase):
+    def test_vendor_key_assigned_to_a_secret_name_is_reported_once(self):
+        # both the vendor pattern and the assignment pattern match; only the more specific hit stays
+        h = hits(assign("API_KEY", ANTHROPIC_KEY))
+        self.assertEqual([x.detector for x in h], ["anthropic-key"])
+
+    def test_quoted_password_literal(self):
+        self.assertEqual(names(assign("password", "Tr0ub4dor&3xyz")), ["secret-assignment"])
+
+    def test_yaml_style_token(self):
+        self.assertEqual(names(assign("api_key", "Qx7Lm2Vb9Tz4Rk8Pw1Yn", quote="'", sep=": ")), ["secret-assignment"])
+
+    def test_django_field_is_not_a_secret(self):
+        self.assertEqual(names("password = models.CharField(max_length=128)"), [])
+
+    def test_type_annotation_is_not_a_secret(self):
+        self.assertEqual(names("api_key: Optional[str] = None"), [])
+
+    def test_tokenizer_variable_is_not_a_secret(self):
+        self.assertEqual(names('tokenizer = AutoTokenizer.from_pretrained("gpt2")'), [])
+
+    def test_token_ttl_is_not_a_secret(self):
+        self.assertEqual(names("TOKEN_TTL = timedelta(hours=1)"), [])
+
+    def test_zod_schema_is_not_a_secret(self):
+        self.assertEqual(names("password: z.string().min(8),"), [])
+
+    def test_password_hash_call_is_not_a_secret(self):
+        self.assertEqual(names("password_hash = hash_password(raw)"), [])
+
+    def test_env_lookup_is_not_a_secret(self):
+        self.assertEqual(names('password = os.environ["DB_PASSWORD"]'), [])
+
+    def test_changeme_is_a_placeholder(self):
+        self.assertEqual(names('password = "changeme"'), [])
+
+    def test_short_value_is_ignored(self):
+        self.assertEqual(names('password = "abc"'), [])
+
+
 class UrlsWithCredentials(unittest.TestCase):
     def test_real_looking_url(self):
         self.assertEqual(names(assign("DB", url("admin", "Qx7Lm2Vb9Tz4", "db.internal:5432", path="/app"))), ["url-with-credentials"])
+
+    def test_empty_user_part(self):
+        self.assertEqual(names(url("", "Qx7Lm2Vb9Tz4Rk8P", "redis:6379", scheme="redis")), ["url-with-credentials"])
+
+    def test_variable_password_is_not_a_secret(self):
+        self.assertEqual(names("DATABASE_URL=postgres://app:${DB_PASS}@db:5432/app"), [])
+
+    def test_localhost_dev_credentials_are_not_a_secret(self):
+        self.assertEqual(names("URL=postgres://app:app@localhost:5432/app"), [])
+
+    def test_example_host_is_a_placeholder(self):
+        self.assertEqual(names("https://user:password@example.com/api"), [])
 
 
 class PersonalData(unittest.TestCase):

@@ -146,6 +146,11 @@ class SecretsInTheTree(HookCase):
         commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
         self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
 
+    def test_django_model_is_not_a_secret(self):
+        repo = make_repo(self.root)
+        commit(repo, {"models.py": "password = models.CharField(max_length=128)\napi_key: Optional[str] = None\n"})
+        self.assertTrue(self.run_hook("git push", repo).allowed)
+
     def test_secret_removed_before_head_but_in_an_outgoing_commit_blocks(self):
         repo = make_repo(self.root)
         commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'}, "add key")
