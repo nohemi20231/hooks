@@ -422,6 +422,42 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class OwnNamesEndToEnd(HookCase):
+    """D7: names in pii-own-names (private, in the state dir); made-up names here."""
+    def _names(self, text):
+        with open(os.path.join(self.state, "pii-own-names"), "w") as f:
+            f.write(text)
+
+    def test_own_name_is_auto_tier(self):
+        self._names("zandrika(vell)?\nvellanquist 0.70\n")
+        repo = make_repo(self.root)
+        commit(repo, {"README.md": "Maintained by Zandrika Vellanquist\n"})
+        run = self.run_hook("git push", repo)
+        self.assertIn("own-name", run.reason.split("redact WITHOUT asking")[1])
+
+    def test_own_name_in_a_path_is_masked_in_line_findings(self):
+        self._names("zandrika\n")
+        repo = make_repo(self.root)
+        commit(repo, {"notes-zandrika.md": f"office {US_PHONE}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertNotIn("zandrika", run.reason.lower())
+
+    def test_bad_names_file_fails_closed_with_a_reason(self):
+        self._names("(unclosed\n")
+        repo = make_repo(self.root)
+        commit(repo, {"a.py": "x = 1\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("pii-own-names", run.reason)
+        self.assertNotIn("Traceback", run.stdout + run.stderr)
+
+    def test_without_a_names_file_names_are_not_scanned(self):
+        repo = make_repo(self.root)
+        commit(repo, {"README.md": "Maintained by Zandrika Vellanquist\n"})
+        self.assertTrue(self.run_hook("git push", repo).allowed)
+
+
 class ProtectedFiles(HookCase):
     """D8: protected paths and transcript content block like secrets; first-person prose asks."""
     def test_first_person_prose_is_ask_tier(self):

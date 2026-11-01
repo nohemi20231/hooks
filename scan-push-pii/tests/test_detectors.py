@@ -196,3 +196,62 @@ class FirstPerson(unittest.TestCase):
 
     def test_first_person_is_reported_once_per_line(self):
         self.assertEqual(names("I think I should say that I am fine and my day was good.", "notes.md"), ["first-person"])
+
+
+class OwnNames(unittest.TestCase):
+    """D7: the owner's names come from a private file; each line carries its own confidence."""
+    def setUp(self):
+        set_own_names(FAKE_OWN_NAMES)
+
+    def tearDown(self):
+        set_own_names([])
+
+    def test_first_name_in_content_is_auto_tier(self):
+        h = hits("Author: Zandrika Vellanquist", "README.md")
+        self.assertEqual([(x.detector, x.confidence) for x in h], [("own-name", 0.90)])
+
+    def test_handle_in_a_path_string(self):
+        self.assertEqual(names('base = "/Users/zandrikavell/workspace"', "settings.py"), ["own-name"])
+
+    def test_match_is_case_insensitive(self):
+        self.assertEqual(names("ZANDRIKA"), ["own-name"])
+
+    def test_name_in_a_path(self):
+        self.assertEqual([h.detector for h in scan_path("docs/zandrika-notes.md")], ["own-name"])
+
+    def test_no_names_configured_means_no_detector(self):
+        set_own_names([])
+        self.assertEqual(names("Author: Zandrika Vellanquist", "README.md"), [])
+
+
+class OwnNamesFile(unittest.TestCase):
+    """policy.load_own_names: one pattern per line, optional confidence, # comments, BOM tolerated."""
+    def _file(self, text):
+        self.dir = tempfile.TemporaryDirectory()
+        path = os.path.join(self.dir.name, "pii-own-names")
+        with open(path, "w", encoding="utf-8-sig") as f:
+            f.write(text)
+        return path
+
+    def tearDown(self):
+        if hasattr(self, "dir"):
+            self.dir.cleanup()
+
+    def test_parses_patterns_and_confidence(self):
+        path = self._file("# names\nzandrika(vell)?\nvellanquist 0.70\n\n")
+        self.assertEqual(policy.load_own_names(path), [("zandrika(vell)?", 0.90), ("vellanquist", 0.70)])
+
+    def test_missing_file_means_no_names(self):
+        self.assertEqual(policy.load_own_names("/nonexistent/pii-own-names"), [])
+
+    def test_bad_pattern_is_an_error_naming_the_line_not_the_pattern(self):
+        path = self._file("zandrika\n(unclosed\n")
+        with self.assertRaises(policy.OwnNamesError) as ctx:
+            policy.load_own_names(path)
+        self.assertIn("line 2", str(ctx.exception))
+        self.assertNotIn("unclosed", str(ctx.exception))
+
+    def test_confidence_outside_zero_to_one_is_an_error(self):
+        path = self._file("zandrika 1.5\n")
+        with self.assertRaises(policy.OwnNamesError):
+            policy.load_own_names(path)
