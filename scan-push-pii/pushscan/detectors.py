@@ -40,6 +40,24 @@ MIN_SECRET_VALUE_LENGTH = 8
 MIN_ENTROPY_LENGTH = 12
 MIN_CHAR_CLASSES = 3
 
+# D7: words about the owner. Prose only: code, comments and short fragments are not prose.
+CODE_LIKE = re.compile(r"[=;{}]|=>|//|\(\)|^\s*#")
+PROSE_SUFFIXES = {".md", ".txt", ".rst", ".csv", ".json", ".yaml", ".yml", ".html", ".htm", ".tex", ".org"}
+MIN_PROSE_WORDS = 5
+ONE_PER_LINE = {"first-person", "own-name"}        # one finding per line is enough for these
+# a copyright notice or an authors file names its owner on purpose: ask once instead of redacting
+COPYRIGHT_LINE = re.compile(r"copyright|\(c\)\s*\d{4}|©", re.I)
+LICENSE_FILES = re.compile(r"^(LICENSE|LICENCE|NOTICE|COPYING|AUTHORS|CONTRIBUTORS|CODEOWNERS)(\.\w+)?$", re.I)
+COPYRIGHT_CONFIDENCE = 0.60
+
+# D8: a protected name is only a signal together with a prose-like file: src/memory.rs is code
+PROTECTED_WORDS = re.compile(r"^(transcripts?|conversations?|chat[-_]?(logs?|history)|journal|diary|personal|memory|sessions?)$", re.I)
+DATED_PROTECTED_WORD = re.compile(r"^(transcripts?|conversations?|chat[-_]?(logs?|history)|journal|diary|sessions?)[-_]\d", re.I)
+PROTECTED_SUFFIXES = {".md", ".txt", ".jsonl", ".json", ".csv", ".log", ".html", ".htm", ".rtf", ".org", ".tex", ""}
+TRANSCRIPT_KEYS = re.compile(r'"(role|parentUuid|sessionId|conversation_id|speaker)"\s*:', re.I)
+TRANSCRIPT_ROLES = re.compile(r'"(user|assistant|human|system|therapist|client)"', re.I)
+TRANSCRIPT_SAMPLE_CHARS = 20000
+
 
 @dataclass(frozen=True)
 class Detector:
@@ -81,6 +99,34 @@ def private_ip(ip: str) -> bool:
 
 def is_dotenv_file(path: str) -> bool:
     return bool(DOTENV_FILE.search(path))
+
+
+def is_prose_file(path: str) -> bool:
+    return os.path.splitext(path)[1].lower() in PROSE_SUFFIXES
+
+
+def is_protected_path(path: str) -> bool:
+    """A transcript, journal, memory or personal-notes file.
+
+    Protected: anything under .claude/projects; a prose-like file whose folder is named like a
+    transcript store (transcripts/, journal/, memory/, ...); or a prose-like file whose own name
+    is that word or that word plus a date (journal-2026-10.md). docs/memory-model.md is not.
+    """
+    if "/.claude/projects/" in "/" + path:
+        return True
+    folders, name = path.split("/")[:-1], path.split("/")[-1]
+    stem, suffix = os.path.splitext(name)
+    if suffix.lower() not in PROTECTED_SUFFIXES:
+        return False
+    if any(PROTECTED_WORDS.match(folder) for folder in folders):
+        return True
+    return bool(PROTECTED_WORDS.match(stem) or DATED_PROTECTED_WORD.match(stem))
+
+
+def looks_like_transcript(text: str) -> bool:
+    """JSON lines with speaker roles or Claude session keys: a conversation export, whatever its name."""
+    sample = text[:TRANSCRIPT_SAMPLE_CHARS]
+    return bool(TRANSCRIPT_KEYS.search(sample) and TRANSCRIPT_ROLES.search(sample))
 
 
 # ---------------------------------------------------------------- scorers
@@ -179,6 +225,21 @@ def score_always(m: re.Match, line: str, path: str, base: float) -> Optional[flo
     return base
 
 
+def score_first_person(m: re.Match, line: str, path: str, base: float) -> Optional[float]:
+    if not is_prose_file(path) or CODE_LIKE.search(line) or len(line.split()) < MIN_PROSE_WORDS:
+        return None
+    return base
+
+
+def score_own_name(m: re.Match, line: str, path: str, base: float) -> Optional[float]:
+    """Each line of the private names file carries its own confidence (a shared surname lower)."""
+    value = m.group(0)
+    confidence = next((c for pattern, c in _own_names if pattern.fullmatch(value)), base)
+    if COPYRIGHT_LINE.search(line) or LICENSE_FILES.match(os.path.basename(path)):
+        return min(confidence, COPYRIGHT_CONFIDENCE)
+    return confidence
+
+
 # ---------------------------------------------------------------- the detectors
 
 def _d(name, tier, regex, base, scorer, flags=0, requires="") -> Detector:
@@ -219,13 +280,33 @@ PERSONAL_DETECTORS = [
     _d("ssn", Tier.PERSONAL, r"(?<![\w-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![\w-])", 0.80, score_ssn),
     _d("card-number", Tier.PERSONAL, r"(?<![\w-])(?:[0-9][ -]?){12,18}[0-9](?![\w-])", 0.85, score_card),
     _d("public-ipv4", Tier.PERSONAL, r"(?<![\w.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![\w.])", 0.40, score_ipv4),
+    _d("first-person", Tier.PERSONAL,
+       r"(?<![\w'])(?:I|I'm|I am|I've|I'd|I'll|[Mm]e|[Mm]y|[Mm]ine|[Mm]yself)(?![\w'])", 0.65, score_first_person),
 ]
 
 PATH_DETECTORS = [
     *[d for d in SECRET_DETECTORS if d.name != "secret-assignment"],
+    _d("protected-path", Tier.SECRET, r".+", 0.95, lambda m, line, path, base: base if is_protected_path(path) else None),
 ]
 
 ALL_DETECTORS = SECRET_DETECTORS + PERSONAL_DETECTORS
+
+# D7: the owner's names. Read from the private pii-own-names file at run time; never in this repo.
+OWN_NAME_DEFAULT_CONFIDENCE = 0.90
+_own_names: list[tuple[re.Pattern, float]] = []
+
+
+def set_own_names(entries: list[tuple[str, float]]) -> None:
+    """Install the own-name detector for `entries` ((regex, confidence) each); empty removes it."""
+    global _own_names
+    _own_names = [(re.compile(pattern, re.I), confidence) for pattern, confidence in entries]
+    for detectors in (ALL_DETECTORS, PATH_DETECTORS):
+        detectors[:] = [d for d in detectors if d.name != "own-name"]
+    if _own_names:
+        combined = "|".join(f"(?:{pattern.pattern})" for pattern, _ in _own_names)
+        detector = _d("own-name", Tier.PERSONAL, combined, OWN_NAME_DEFAULT_CONFIDENCE, score_own_name, re.I)
+        ALL_DETECTORS.append(detector)
+        PATH_DETECTORS.append(detector)
 
 
 # ---------------------------------------------------------------- scanning
@@ -240,9 +321,11 @@ def _run(detectors: list[Detector], text: str, path: str, one_per_detector: bool
             if confidence is None:
                 continue
             tier = detector.tier
+            if detector.name == "first-person" and is_protected_path(path):
+                tier = Tier.SECRET            # D8: personal prose inside a protected file never ships
             value = m.group(0)
             hits.append(Hit(detector.name, tier, confidence, value, m.start(), m.end()))
-            if one_per_detector:
+            if one_per_detector or detector.name in ONE_PER_LINE:
                 break
     return _drop_personal_inside_secret(hits)
 
@@ -250,7 +333,7 @@ def _run(detectors: list[Detector], text: str, path: str, one_per_detector: bool
 def _drop_personal_inside_secret(hits: list[Hit]) -> list[Hit]:
     """One finding per secret: an email inside a credential URL, or a generic assignment match around
     a vendor key, is part of that secret, not a second finding. The most confident hit wins."""
-    secrets = sorted((h for h in hits if h.tier is Tier.SECRET),
+    secrets = sorted((h for h in hits if h.tier is Tier.SECRET and h.detector != "first-person"),
                      key=lambda h: -h.confidence)
     kept_secrets: list[Hit] = []
     for hit in secrets:
