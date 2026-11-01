@@ -257,3 +257,12 @@ class NothingRawLeavesTheScan(HookCase):
         self.assertTrue(run.denied)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, read_bytes(os.path.join(self.state, "scan-push.log")).decode())
+
+
+class AwkwardContent(HookCase):
+    """Reviewer items 15, 16, 22, 23: quoted paths, binaries, non-UTF-8 lines, $(...) in cd."""
+    def test_non_utf8_added_line_does_not_fail_closed(self):
+        repo = make_repo(self.root)
+        commit(repo, {"menu.txt": b"caf\xe9 au lait\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.allowed, run.stdout)
