@@ -15,10 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fixtures import ANTHROPIC_KEY as FAKE_ANTHROPIC_KEY, AWS_KEY as FAKE_AWS_KEY, GMAIL, US_PHONE  # noqa: E402
 
 
+
 def read_bytes(path):
     with open(path, "rb") as f:
         return f.read()
-
 
 def git(repo, *args, **kw):
     return subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, capture_output=True, text=True, check=True, **kw).stdout
@@ -206,6 +206,14 @@ class WhichRefsArePushed(HookCase):
         commit(repo, {"a.py": "x = 1\n"})
         run = self.run_hook("git push -u origin feature", repo)
         self.assertTrue(run.allowed, run.stdout)
+
+    def test_branch_created_in_the_same_command_scans_head(self):
+        repo = make_repo(self.root)
+        commit(repo, {"a.py": "x = 1\n"})
+        run = self.run_hook("git checkout -b feature && git push -u origin feature", repo)
+        self.assertTrue(run.allowed, run.stdout)
+        commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
+        self.assertTrue(self.run_hook("git checkout -b leak && git push -u origin leak", repo).denied)
 
     def test_named_branch_other_than_head_is_scanned(self):
         repo = make_repo(self.root)
