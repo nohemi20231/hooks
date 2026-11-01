@@ -215,3 +215,16 @@ class Wrappers(unittest.TestCase):
     def test_xargs_git_is_a_candidate(self):
         push = one("echo push | xargs git")
         self.assertFalse(push.certain)
+
+    def test_bash_lc_and_ec(self):
+        self.assertEqual(len(find_pushes('bash -lc "git push"', CWD)), 1)
+        self.assertEqual(len(find_pushes('bash -ec "git push"', CWD)), 1)
+
+    def test_env_unset_then_git(self):
+        self.assertEqual(len(find_pushes("env -u FOO git push", CWD)), 1)
+
+    def test_env_chdir(self):
+        self.assertEqual(one("env -C /other git push").cwd, "/other")
+
+    def test_export_git_dir_persists_across_segments(self):
+        self.assertEqual(one("export GIT_DIR=/r1/.git; git push").cwd, "/r1")
