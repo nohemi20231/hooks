@@ -357,6 +357,12 @@ class MoreRefsAndRemotes(HookCase):
 
 class AwkwardContent(HookCase):
     """Reviewer items 15, 16, 22, 23: quoted paths, binaries, non-UTF-8 lines, $(...) in cd."""
+    def test_quoted_path_in_diff_is_scanned(self):
+        repo = make_repo(self.root)
+        commit(repo, {'we"ird.md': f"mail {GMAIL}\n"})
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied, run.stdout)
+
     def test_non_utf8_added_line_does_not_fail_closed(self):
         repo = make_repo(self.root)
         commit(repo, {"menu.txt": b"caf\xe9 au lait\n"})
