@@ -362,6 +362,20 @@ class MoreRefsAndRemotes(HookCase):
         self.assertIn("commit message", run.reason)
         self.assertNotIn(FAKE_ANTHROPIC_KEY, run.stdout)
 
+    def test_secret_only_in_a_merge_commit_blocks(self):
+        repo = make_repo(self.root)
+        git(repo, "checkout", "-qb", "feature")
+        commit(repo, {"f.txt": "feature\n"})
+        git(repo, "checkout", "-q", "main")
+        commit(repo, {"m.txt": "main\n"})
+        git(repo, "merge", "-q", "--no-ff", "--no-commit", "feature")
+        write(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'})
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "merge")
+        git(repo, "rm", "-q", "config.py")
+        git(repo, "commit", "-qm", "remove")
+        self.assertTrue(self.run_hook("git push", repo).denied)
+
 
 class AwkwardContent(HookCase):
     """Reviewer items 15, 16, 22, 23: quoted paths, binaries, non-UTF-8 lines, $(...) in cd."""
