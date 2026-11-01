@@ -83,3 +83,37 @@ class TerminalPush(PrePushCase):
         self.assertNotEqual(run.returncode, 0)
         self.assertIn("pii-own-names", run.stderr)
         self.assertNotIn("Traceback", run.stderr)
+
+
+class InstallScript(PrePushCase):
+    def test_install_links_the_entry_and_sets_the_global_hooks_path(self):
+        home = os.path.join(self.root, "home")
+        os.makedirs(os.path.join(home, ".claude"))
+        env = dict(os.environ, HOME=home)
+        run = subprocess.run(["sh", INSTALL], cwd=FOLDER, capture_output=True, text=True, env=env)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        entry = os.path.join(home, ".claude", "hooks", "scan-push-pii.py")
+        self.assertTrue(os.path.islink(entry))
+        self.assertEqual(os.path.realpath(entry), os.path.join(FOLDER, "scan-push-pii.py"))
+        hooks_path = subprocess.run(["git", "config", "--global", "--get", "core.hooksPath"],
+                                    capture_output=True, text=True, env=env).stdout.strip()
+        self.assertEqual(os.path.realpath(hooks_path), GIT_HOOKS)
+        self.assertIn("settings.json", run.stdout)       # the settings snippet is merged by hand
+
+    def test_install_keeps_a_hooks_path_that_already_exists(self):
+        home = os.path.join(self.root, "home")
+        os.makedirs(os.path.join(home, ".claude"))
+        env = dict(os.environ, HOME=home)
+        other = os.path.join(self.root, "other-hooks")
+        os.makedirs(other)
+        subprocess.run(["git", "config", "--global", "core.hooksPath", other], check=True, env=env)
+        run = subprocess.run(["sh", INSTALL], cwd=FOLDER, capture_output=True, text=True, env=env)
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("core.hooksPath", run.stderr)
+        hooks_path = subprocess.run(["git", "config", "--global", "--get", "core.hooksPath"],
+                                    capture_output=True, text=True, env=env).stdout.strip()
+        self.assertEqual(hooks_path, other)
+
+
+if __name__ == "__main__":
+    unittest.main()
