@@ -1,11 +1,13 @@
 """What each detector flags, at what confidence, and what it leaves alone."""
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from pushscan.detectors import scan_text, scan_path, Tier  # noqa: E402
+from pushscan import policy  # noqa: E402
+from pushscan.detectors import is_protected_path, looks_like_transcript, scan_path, scan_text, set_own_names, Tier  # noqa: E402
 from fixtures import (ANTHROPIC_KEY, AWS_KEY, AWS_SECRET, CARD, E164_PHONE, ENCRYPTED_KEY_HEADER, GMAIL,  # noqa: E402
                       JWT_IO_SAMPLE, JWT_OTHER, PRIVATE_KEY_HEADER, PUBLIC_IP, RANDOM, RANDOM_LONG, SSN, US_PHONE,
                       US_PHONE_DASHED, WORK_EMAIL, assign, bearer, url)

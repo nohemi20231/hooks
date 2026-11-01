@@ -146,6 +146,14 @@ class SecretsInTheTree(HookCase):
         commit(repo, {"sub/.env": f"KEY={FAKE_ANTHROPIC_KEY}\n"})
         self.assertTrue(self.run_hook("cd sub && git push", repo).denied)
 
+    def test_secret_removed_before_head_but_in_an_outgoing_commit_blocks(self):
+        repo = make_repo(self.root)
+        commit(repo, {"config.py": f'KEY = "{FAKE_ANTHROPIC_KEY}"\n'}, "add key")
+        commit(repo, {"config.py": 'KEY = os.environ["KEY"]\n'}, "remove key")
+        run = self.run_hook("git push", repo)
+        self.assertTrue(run.denied)
+        self.assertIn("anthropic-key", run.reason)
+
     def test_large_tree_scans_within_the_hook_timeout(self):
         repo = make_repo(self.root)
         files = {f"pkg/m{i:04d}/file{i}.py": f"value_{i} = {i}\n" for i in range(3000)}
