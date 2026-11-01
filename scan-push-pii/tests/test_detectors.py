@@ -220,6 +220,15 @@ class OwnNames(unittest.TestCase):
     def test_match_is_case_insensitive(self):
         self.assertEqual(names("ZANDRIKA"), ["own-name"])
 
+    def test_copyright_line_is_ask_tier(self):
+        h = hits("Copyright 2026 Zandrika Vellanquist", "README.md")
+        self.assertEqual([(x.detector, x.confidence) for x in h], [("own-name", 0.60)])
+
+    def test_license_file_is_ask_tier(self):
+        h = hits("Zandrika Vellanquist", "NOTICE")
+        self.assertEqual([x.detector for x in h], ["own-name"])
+        self.assertLess(h[0].confidence, 0.80)
+
     def test_name_in_a_path(self):
         self.assertEqual([h.detector for h in scan_path("docs/zandrika-notes.md")], ["own-name"])
 
