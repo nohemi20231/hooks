@@ -157,6 +157,13 @@ class SecretsInTheTree(HookCase):
 
 
 class WhichRefsArePushed(HookCase):
+    def test_new_branch_is_compared_with_the_remote_it_forked_from(self):
+        repo = make_repo(self.root, files={"CONTACT.md": f"mail {GMAIL}\n"})   # origin/main already has the address
+        git(repo, "checkout", "-qb", "feature")
+        commit(repo, {"a.py": "x = 1\n"})
+        run = self.run_hook("git push -u origin feature", repo)
+        self.assertTrue(run.allowed, run.stdout)
+
     def test_named_branch_other_than_head_is_scanned(self):
         repo = make_repo(self.root)
         git(repo, "checkout", "-qb", "leak")
