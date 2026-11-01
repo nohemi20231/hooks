@@ -363,6 +363,11 @@ class AwkwardContent(HookCase):
         run = self.run_hook("git push", repo)
         self.assertTrue(run.denied, run.stdout)
 
+    def test_secret_inside_a_binary_blob_is_found(self):
+        repo = make_repo(self.root)
+        commit(repo, {"app.db": b"SQLite\x00format\n" + FAKE_ANTHROPIC_KEY.encode() + b"\n"})
+        self.assertTrue(self.run_hook("git push", repo).denied)
+
     def test_non_utf8_added_line_does_not_fail_closed(self):
         repo = make_repo(self.root)
         commit(repo, {"menu.txt": b"caf\xe9 au lait\n"})
