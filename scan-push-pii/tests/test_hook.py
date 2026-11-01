@@ -266,3 +266,9 @@ class AwkwardContent(HookCase):
         commit(repo, {"menu.txt": b"caf\xe9 au lait\n"})
         run = self.run_hook("git push", repo)
         self.assertTrue(run.allowed, run.stdout)
+
+    def test_cd_to_command_substitution_keeps_the_current_directory(self):
+        repo = make_repo(self.root, files={"k.txt": FAKE_ANTHROPIC_KEY + "\n"})
+        run = self.run_hook('cd "$(git rev-parse --show-toplevel)" && git push', repo)
+        self.assertTrue(run.denied)
+        self.assertIn("anthropic-key", run.reason)
