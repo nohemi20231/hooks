@@ -111,6 +111,12 @@ class CleanAndNonPush(HookCase):
     def test_non_repo_cwd_is_allowed(self):
         self.assertTrue(self.run_hook("git push", self.root).allowed)
 
+    def test_malformed_input_is_denied_readably(self):
+        run = self.run_hook("", self.root, tool_input="str")
+        self.assertTrue(run.denied)
+        self.assertNotIn("Traceback", run.stdout + run.stderr)
+        self.assertIn("payload", run.reason)
+
 
 class SecretsInTheTree(HookCase):
     def test_secret_at_head_blocks(self):
