@@ -20,8 +20,12 @@ def read_bytes(path):
     with open(path, "rb") as f:
         return f.read()
 
+NO_HOOKS = tempfile.mkdtemp(prefix="pushscan-nohooks-")   # an empty hooks dir: a globally installed pre-push hook must not run here
+
+
 def git(repo, *args, **kw):
-    return subprocess.run(["git", "-c", "commit.gpgsign=false", *args], cwd=repo, capture_output=True, text=True, check=True, **kw).stdout
+    return subprocess.run(["git", "-c", "commit.gpgsign=false", "-c", f"core.hooksPath={NO_HOOKS}", *args],
+                          cwd=repo, capture_output=True, text=True, check=True, **kw).stdout
 
 
 def make_repo(root, name="r1", files=None, remote=True):
