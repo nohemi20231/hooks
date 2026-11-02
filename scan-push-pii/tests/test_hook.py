@@ -536,7 +536,7 @@ class OwnNamesEndToEnd(HookCase):
 
 
 class ProtectedFiles(HookCase):
-    """D8: protected paths and transcript content block like secrets; first-person prose asks."""
+    """D8: protected paths and transcript content block like secrets."""
     def test_transcript_file_is_blocked_like_a_secret(self):
         repo = make_repo(self.root)
         commit(repo, {"data/transcripts/2026-10-31.txt": "plain text\n"})
@@ -551,15 +551,15 @@ class ProtectedFiles(HookCase):
         self.assertTrue(run.denied)
         self.assertIn("transcript-content", run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0])
 
-    def test_first_person_inside_journal_is_blocked(self):
+    def test_journal_with_prose_is_blocked_by_its_path_alone(self):
         repo = make_repo(self.root)
         commit(repo, {"journal/day.md": "I am not sure I can do this again today.\n"})
         run = self.run_hook("git push", repo)
-        secrets_block = run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0]
-        self.assertIn("first-person", secrets_block)
+        self.assertTrue(run.denied)
+        self.assertIn("protected-path", run.reason.split("SECRETS")[1].split("PERSONAL DATA")[0])
+        self.assertNotIn("first-person", run.reason)
 
-    def test_first_person_prose_is_ask_tier(self):
+    def test_first_person_prose_is_allowed(self):
         repo = make_repo(self.root)
-        commit(repo, {"notes.md": "Today I felt that my session went badly and I am tired.\n"})
-        run = self.run_hook("git push", repo)
-        self.assertIn("first-person", run.reason.split("ASK THE USER")[1])
+        commit(repo, {"notes.md": "I accepted the plan, my file lists what I did for me.\n"})
+        self.assertTrue(self.run_hook("git push", repo).allowed)

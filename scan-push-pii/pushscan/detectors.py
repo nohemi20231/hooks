@@ -42,11 +42,8 @@ MIN_SECRET_VALUE_LENGTH = 8
 MIN_ENTROPY_LENGTH = 12
 MIN_CHAR_CLASSES = 3
 
-# D7: words about the owner. Prose only: code, comments and short fragments are not prose.
-CODE_LIKE = re.compile(r"[=;{}]|=>|//|\(\)|^\s*#")
-PROSE_SUFFIXES = {".md", ".txt", ".rst", ".csv", ".json", ".yaml", ".yml", ".html", ".htm", ".tex", ".org"}
-MIN_PROSE_WORDS = 5
-ONE_PER_LINE = {"first-person", "own-name"}        # one finding per line is enough for these
+# D7: the owner's names (patterns from the private file, see set_own_names)
+ONE_PER_LINE = {"own-name"}                        # one finding per line is enough for these
 # a copyright notice or an authors file names its owner on purpose: ask once instead of redacting
 COPYRIGHT_LINE = re.compile(r"copyright|\(c\)\s*\d{4}|©", re.I)
 LICENSE_FILES = re.compile(r"^(LICENSE|LICENCE|NOTICE|COPYING|AUTHORS|CONTRIBUTORS|CODEOWNERS)(\.\w+)?$", re.I)
@@ -101,10 +98,6 @@ def private_ip(ip: str) -> bool:
 
 def is_dotenv_file(path: str) -> bool:
     return bool(DOTENV_FILE.search(path))
-
-
-def is_prose_file(path: str) -> bool:
-    return os.path.splitext(path)[1].lower() in PROSE_SUFFIXES
 
 
 def is_protected_path(path: str) -> bool:
@@ -227,12 +220,6 @@ def score_always(m: re.Match, line: str, path: str, base: float) -> Optional[flo
     return base
 
 
-def score_first_person(m: re.Match, line: str, path: str, base: float) -> Optional[float]:
-    if not is_prose_file(path) or CODE_LIKE.search(line) or len(line.split()) < MIN_PROSE_WORDS:
-        return None
-    return base
-
-
 def score_own_name(m: re.Match, line: str, path: str, base: float) -> Optional[float]:
     """Each line of the private names file carries its own confidence (a shared surname lower)."""
     value = m.group(0)
@@ -283,8 +270,6 @@ PERSONAL_DETECTORS = [
     _d("ssn", Tier.PERSONAL, r"(?<![\w-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![\w-])", 0.80, score_ssn),
     _d("card-number", Tier.PERSONAL, r"(?<![\w-])(?:[0-9][ -]?){12,18}[0-9](?![\w-])", 0.85, score_card),
     _d("public-ipv4", Tier.PERSONAL, r"(?<![\w.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![\w.])", 0.40, score_ipv4),
-    _d("first-person", Tier.PERSONAL,
-       r"(?<![\w'])(?:I|I'm|I am|I've|I'd|I'll|[Mm]e|[Mm]y|[Mm]ine|[Mm]yself)(?![\w'])", 0.65, score_first_person),
 ]
 
 PATH_DETECTORS = [
@@ -323,11 +308,7 @@ def _run(detectors: list[Detector], text: str, path: str, one_per_detector: bool
             confidence = detector.score(m, text, path, detector.base)
             if confidence is None:
                 continue
-            tier = detector.tier
-            if detector.name == "first-person" and is_protected_path(path):
-                tier = Tier.SECRET            # D8: personal prose inside a protected file never ships
-            value = m.group(0)
-            hits.append(Hit(detector.name, tier, confidence, value, m.start(), m.end()))
+            hits.append(Hit(detector.name, detector.tier, confidence, m.group(0), m.start(), m.end()))
             if one_per_detector or detector.name in ONE_PER_LINE:
                 break
     return _drop_personal_inside_secret(hits)
@@ -336,8 +317,7 @@ def _run(detectors: list[Detector], text: str, path: str, one_per_detector: bool
 def _drop_personal_inside_secret(hits: list[Hit]) -> list[Hit]:
     """One finding per secret: an email inside a credential URL, or a generic assignment match around
     a vendor key, is part of that secret, not a second finding. The most confident hit wins."""
-    secrets = sorted((h for h in hits if h.tier is Tier.SECRET and h.detector != "first-person"),
-                     key=lambda h: -h.confidence)
+    secrets = sorted((h for h in hits if h.tier is Tier.SECRET), key=lambda h: -h.confidence)
     kept_secrets: list[Hit] = []
     for hit in secrets:
         if not any(_overlaps(hit, k) for k in kept_secrets):

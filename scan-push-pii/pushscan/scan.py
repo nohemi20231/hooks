@@ -30,8 +30,7 @@ def masked_text(text: str) -> str:
     """Free text (an error message, a command) with every detectable value masked and ~ for home."""
     shown = shorten_home(text)
     for hit in sorted(scan_text(text, "message.txt"), key=lambda h: -h.start):
-        if hit.detector != "first-person":                # a pronoun in an error message reveals nothing
-            shown = shown[:hit.start] + mask(hit.value) + shown[hit.end:]
+        shown = shown[:hit.start] + mask(hit.value) + shown[hit.end:]
     return shown
 
 

@@ -73,7 +73,7 @@ Before a push reaches GitHub, the whole pushed tree and every outgoing commit ar
 secrets (API keys, private keys, credential URLs, bearer tokens, secret assignments) and for
 protected files (transcripts, journals, memory, personal notes); any hit blocks the push, no
 threshold, no allowlist. Lines the push adds are scanned for personal data (emails, phones, SSNs,
-cards, your own names from a private file, first-person prose): at or above 0.80 confidence
+cards, your own names from a private file): at or above 0.80 confidence
 Claude redacts, below it Claude asks you per item. Nothing raw is printed or logged.
 
 ```bash
