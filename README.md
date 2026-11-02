@@ -24,4 +24,4 @@ Details, the detector table and the private files it reads: [`scan-push-pii/READ
 
 ## License
 
-[MIT](LICENSE).
+Copyright 2026 Nohemi Gonzalez Lopez. Licensed under the [Apache License, Version 2.0](LICENSE). Keep the [`NOTICE`](NOTICE) file when redistributing.
