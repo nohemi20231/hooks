@@ -220,24 +220,17 @@ if __name__ == "__main__":
 FAKE_OWN_NAMES = [("zandrika(vell)?", 0.90), ("vellanquist", 0.70)]
 
 
-class FirstPerson(unittest.TestCase):
-    """D7: prose about the owner. Code and short fragments are not prose."""
-    def test_first_person_prose_in_markdown(self):
-        h = hits("Today I felt that my session went badly and I am tired.", "journal.md")
-        self.assertEqual([x.detector for x in h], ["first-person"])
-        self.assertEqual(h[0].confidence, 0.65)
+class FirstPersonProseIsNotPersonalData(unittest.TestCase):
+    """Design agents write in their own voice: "I", "my" and "me" reveal nothing about the owner."""
+    def test_first_person_prose_in_markdown_is_not_a_finding(self):
+        self.assertEqual(hits("I accepted the plan, my file lists what I did for me.", "notes.md"), [])
 
-    def test_first_person_in_code_file_is_ignored(self):
-        self.assertEqual(names("# I think this loop is slow and my fix is below", "app.py"), [])
+    def test_first_person_prose_in_a_journal_is_not_a_text_finding(self):
+        self.assertEqual(hits("I am not sure I can do this again.", "journal/2026.md"), [])
 
-    def test_short_fragment_is_not_prose(self):
-        self.assertEqual(names("me", "notes.md"), [])
-
-    def test_code_like_line_in_markdown_is_ignored(self):
-        self.assertEqual(names("const me = users.find(u => u.id === myId);", "README.md"), [])
-
-    def test_first_person_is_reported_once_per_line(self):
-        self.assertEqual(names("I think I should say that I am fine and my day was good.", "notes.md"), ["first-person"])
+    def test_other_detectors_still_fire_next_to_first_person_prose(self):
+        self.assertEqual(names(f"I sent it to {GMAIL} from my laptop for me.", "notes.md"), ["email"])
+        self.assertEqual(names(f"My number is {US_PHONE}, call me.", "notes.md"), ["phone-us"])
 
 
 class OwnNames(unittest.TestCase):
@@ -329,10 +322,6 @@ class Paths(unittest.TestCase):
 
     def test_chat_log_is_protected(self):
         self.assertEqual([h.detector for h in scan_path("logs/chat-log.txt")], ["protected-path"])
-
-    def test_first_person_inside_protected_path_is_blocked(self):
-        h = hits("I am not sure I can do this again.", "journal/2026.md")
-        self.assertEqual(h[0].tier, Tier.SECRET)
 
 
 class ProtectedPathsAreNarrow(unittest.TestCase):
