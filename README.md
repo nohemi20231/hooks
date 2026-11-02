@@ -84,4 +84,6 @@ Details, the detector table and the private files it reads: [`scan-push-pii/READ
 
 ## License
 
-Copyright 2026 Nohemi Gonzalez Lopez. Licensed under the [Apache License, Version 2.0](LICENSE). Keep the [`NOTICE`](NOTICE) file when redistributing.
+`scan-push-pii/` and the rest of the repo: [MIT](LICENSE).
+
+`agent-complete-sound/` is adapted from Pamela Fox's hook, so it keeps the Apache License 2.0 with its own [`LICENSE`](agent-complete-sound/LICENSE) and [`NOTICE`](agent-complete-sound/NOTICE); keep both when redistributing it.
